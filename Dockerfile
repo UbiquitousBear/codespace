@@ -8,12 +8,6 @@ RUN apk add --no-cache \
     docker-cli \
     docker-compose
 
-# Install code-server
-RUN curl -fsSL https://code-server.dev/install.sh | sh
-
-# Install coder agent bootstrap
-RUN curl -fsSL https://coder.com/install.sh | sh
-
 COPY init.sh /init.sh
 RUN chmod +x /init.sh
 
