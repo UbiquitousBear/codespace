@@ -73,6 +73,12 @@ if [ -n "$DEVCONTAINER_JSON" ]; then
   done
 fi
 
+# Install code-server
+curl -fsSL https://code-server.dev/install.sh | sh
+
+# Install coder agent bootstrap
+curl -fsSL https://coder.com/install.sh | sh
+
 # Start code-server
 echo "Starting code-server..."
 code-server \
