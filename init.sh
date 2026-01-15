@@ -25,15 +25,18 @@ REPO_DIR="/workspaces/$REPO_NAME"
 if [ -n "$REPO_URL" ] && [ ! -d "$REPO_DIR/.git" ]; then
   echo "Cloning $REPO_URL..."
   git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$REPO_DIR"
+  echo "Git clone finished"
 fi
 
 cd "$REPO_DIR"
 
 # Configure git
+echo "Configuring git"
 git config --global credential.helper store
 git config --global --add safe.directory "$REPO_DIR"
 
 # Devcontainer handling
+echo "Handle Devcontainer setup"
 DEVCONTAINER_JSON=""
 [ -f ".devcontainer/devcontainer.json" ] && DEVCONTAINER_JSON=".devcontainer/devcontainer.json"
 [ -f ".devcontainer.json" ] && DEVCONTAINER_JSON=".devcontainer.json"
