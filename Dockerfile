@@ -9,8 +9,8 @@ RUN apk add --no-cache \
     docker-compose \
     shadow
 
-RUN groupadd -g 1000 codespace && \
-    useradd -m -u 1000 -g 1000 -s /bin/bash codespace
+RUN groupadd -g 107 codespace && \
+    useradd -m -u 1000 -g 107 -s /bin/bash codespace
 
 RUN mkdir -p /home/codespace && chown -R 1000:1000 /home/codespace
 
