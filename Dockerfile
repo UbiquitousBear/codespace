@@ -10,9 +10,9 @@ RUN apk add --no-cache \
     shadow
 
 RUN groupadd -g 107 codespace && \
-    useradd -m -u 1000 -g 107 -s /bin/bash codespace
+    useradd -m -u 107 -g 107 -s /bin/bash codespace
 
-RUN mkdir -p /home/codespace && chown -R 1000:1000 /home/codespace
+RUN mkdir -p /home/codespace && chown -R 107:107 /home/codespace
 
 
 COPY init.sh /init.sh
