@@ -4,10 +4,10 @@ set -e
 echo "Codespace initializing..."
 
 # Read configuration injected via cloud-init or configmap
-CODER_AGENT_TOKEN=$(cat /run/config/coder-token 2>/dev/null || echo "")
-GITHUB_TOKEN=$(cat /run/config/github-token 2>/dev/null || echo "")
-REPO_URL=$(cat /run/config/repo-url 2>/dev/null || echo "")
-BRANCH=$(cat /run/config/branch 2>/dev/null || echo "main")
+CODER_AGENT_TOKEN=$(cat /var/config/coder-token 2>/dev/null || echo "")
+GITHUB_TOKEN=$(cat /var/config/github-token 2>/dev/null || echo "")
+REPO_URL=$(cat /var/config/repo-url 2>/dev/null || echo "")
+BRANCH=$(cat /var/config/branch 2>/dev/null || echo "main")
 
 export CODER_AGENT_TOKEN GITHUB_TOKEN
 
