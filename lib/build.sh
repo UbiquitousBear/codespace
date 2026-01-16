@@ -1,59 +1,103 @@
-#!/usr/bin/env bash
-# lib/build.sh
+#!/bin/bash
+# build.sh - Build or pull the dev container image
 
 prepare_image() {
-    local config_dir="$1"
+    local workspace="$1"
     local image_ref=""
-    
-    if [[ -n "${DEVCONTAINER_IMAGE}" ]]; then
-        # Direct image reference - pull it
-        image_ref="${DEVCONTAINER_IMAGE}"
-        log info "pulling image: ${image_ref}"
-        docker pull "${image_ref}"
-        
-    elif [[ -n "${DEVCONTAINER_DOCKERFILE}" ]]; then
+
+    if [[ -n "${DC_IMAGE}" ]]; then
+        # Direct image reference
+        image_ref="${DC_IMAGE}"
+        pull_image "${image_ref}"
+
+    elif [[ -n "${DC_DOCKERFILE}" ]]; then
         # Build from Dockerfile
-        image_ref="devcontainer-${WORKSPACE_NAME}:latest"
-        build_from_dockerfile "${config_dir}" "${image_ref}"
-        
+        image_ref="devcontainer-${REPO_NAME}:latest"
+        build_image "${image_ref}"
+
     else
-        log error "no image or Dockerfile specified in devcontainer.json"
-        exit 1
+        # Fallback to universal
+        log_warn "no image or Dockerfile specified, using universal"
+        image_ref="mcr.microsoft.com/devcontainers/universal:2"
+        pull_image "${image_ref}"
     fi
-    
+
     echo "${image_ref}"
 }
 
-build_from_dockerfile() {
-    local config_dir="$1"
-    local image_tag="$2"
-    
-    local dockerfile="${config_dir}/${DEVCONTAINER_DOCKERFILE}"
-    local context="${config_dir}/${DEVCONTAINER_CONTEXT}"
-    
-    # Resolve context - could be relative to workspace
-    if [[ "${DEVCONTAINER_CONTEXT}" == ".." || "${DEVCONTAINER_CONTEXT}" == "../"* ]]; then
-        context="${WORKSPACE_PATH}/${DEVCONTAINER_CONTEXT#../}"
+pull_image() {
+    local image="$1"
+
+    log_info "pulling image: ${image}"
+
+    if ! docker pull "${image}"; then
+        log_error "failed to pull image: ${image}"
+        exit 1
     fi
-    
-    log info "building image from ${dockerfile}"
-    log debug "context: ${context}"
-    
+}
+
+build_image() {
+    local tag="$1"
+
+    # Resolve paths relative to config directory
+    local dockerfile="${DC_CONFIG_DIR}/${DC_DOCKERFILE}"
+    local context="${DC_CONFIG_DIR}/${DC_CONTEXT}"
+
+    # Context might reference parent directory (common pattern)
+    if [[ "${DC_CONTEXT}" == ".." || "${DC_CONTEXT}" == "../"* ]]; then
+        # Resolve relative to config dir
+        context="$(cd "${DC_CONFIG_DIR}" && cd "${DC_CONTEXT}" && pwd)"
+    fi
+
+    # Dockerfile might be relative to context instead of config dir
+    if [[ ! -f "${dockerfile}" && -f "${context}/${DC_DOCKERFILE}" ]]; then
+        dockerfile="${context}/${DC_DOCKERFILE}"
+    fi
+
+    log_info "building image: ${tag}"
+    log_debug "dockerfile: ${dockerfile}"
+    log_debug "context: ${context}"
+
     local build_args=()
-    
+
     # Parse build args from JSON
-    if [[ "${DEVCONTAINER_BUILD_ARGS}" != "{}" ]]; then
+    if [[ "${DC_BUILD_ARGS}" != "{}" ]]; then
         while IFS='=' read -r key value; do
+            # Expand variables in value
+            value=$(expand_build_arg "${value}")
             build_args+=(--build-arg "${key}=${value}")
-        done < <(echo "${DEVCONTAINER_BUILD_ARGS}" | jq -r 'to_entries[] | "\(.key)=\(.value)"')
+        done < <(echo "${DC_BUILD_ARGS}" | jq -r 'to_entries[] | "\(.key)=\(.value)"')
     fi
-    
-    # Standard build args that devcontainer spec suggests
+
+    # Enable BuildKit caching
+    export DOCKER_BUILDKIT=1
     build_args+=(--build-arg "BUILDKIT_INLINE_CACHE=1")
-    
-    docker build \
-        -t "${image_tag}" \
+
+    if ! docker build \
+        -t "${tag}" \
         -f "${dockerfile}" \
         "${build_args[@]}" \
-        "${context}"
+        "${context}"; then
+
+        log_error "docker build failed"
+
+        # Fallback to universal
+        log_warn "falling back to universal image"
+        echo "mcr.microsoft.com/devcontainers/universal:2"
+        return 0
+    fi
+
+    echo "${tag}"
+}
+
+expand_build_arg() {
+    local value="$1"
+
+    # Common variables used in devcontainer build args
+    value="${value//\$\{localWorkspaceFolder\}/${WORKDIR}}"
+    value="${value//\$\{localWorkspaceFolderBasename\}/${REPO_NAME}}"
+    value="${value//\$\{localEnv:USER\}/${USER:-root}}"
+    value="${value//\$\{localEnv:HOME\}/${HOME:-/root}}"
+
+    echo "${value}"
 }
