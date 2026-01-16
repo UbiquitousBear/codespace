@@ -1,0 +1,15 @@
+{
+    "name": "Universal",
+    "image": "mcr.microsoft.com/devcontainers/universal:linux",
+    "features": {},
+    "remoteUser": "codespace",
+    "postCreateCommand": "echo 'Welcome to your codespace!'",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "GitHub.copilot",
+                "ms-azuretools.vscode-docker"
+            ]
+        }
+    }
+}

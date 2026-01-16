@@ -1,33 +1,46 @@
-# codespace-host: coordinates devcontainer + runs coder agent inside it
-FROM alpine:3.23
+# codespace-host image
+# This runs as a LinuxKit service and orchestrates the dev container
 
-# Basic tooling needed for coordination + talking to Docker
+FROM docker:27-dind
+
+# Install dependencies
 RUN apk add --no-cache \
     bash \
+    curl \
     git \
     jq \
-    curl \
-    ca-certificates \
-    docker-cli
+    openssh-client \
+    tar \
+    gzip
 
-# Create a non-root user (host doesn’t run user workloads, just orchestration)
-RUN addgroup -g 1000 codespace && \
-    adduser -D -u 1000 -G codespace -s /bin/bash codespace
+# Optional: Install oras for dev container features support
+# This enables pulling OCI artifacts for features
+ARG ORAS_VERSION=1.3.0
+RUN curl -fsSL "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz" \
+    | tar -xz -C /usr/local/bin oras
 
-#
-# Bake the coder binary into the host image
-# (you can pin a version or switch this to an internal mirror later)
-#
-RUN curl -fsSL https://coder.com/install.sh | sh -s -- --bin-dir /usr/local/bin
+# Copy codespace-host
+COPY bin/ /opt/codespace-host/bin/
+COPY lib/ /opt/codespace-host/lib/
+COPY defaults/ /opt/codespace-host/defaults/
 
-# Optional: sanity check (can be removed later)
-RUN ls -l /usr/local/bin/coder
+# Make scripts executable
+RUN chmod +x /opt/codespace-host/bin/* \
+    && chmod +x /opt/codespace-host/lib/*.sh
 
-# Add the host init script
-COPY init.sh /usr/local/bin/init-host.sh
-RUN chmod +x /usr/local/bin/init-host.sh
+# Coder binary should be added at build time or mounted
+# Example: COPY --from=coder /usr/bin/coder /usr/local/bin/coder
+ARG CODER_VERSION=2.16.0
+RUN curl -fsSL "https://github.com/coder/coder/releases/download/v${CODER_VERSION}/coder_${CODER_VERSION}_linux_amd64.tar.gz" \
+    | tar -xz -C /usr/local/bin coder \
+    && chmod +x /usr/local/bin/coder
 
-USER codespace
-WORKDIR /home/codespace
+# Working directory
+WORKDIR /workspaces
 
-ENTRYPOINT ["/usr/local/bin/init-host.sh"]
+# Environment
+ENV PATH="/opt/codespace-host/bin:${PATH}"
+ENV LOG_LEVEL="info"
+
+# Entrypoint
+ENTRYPOINT ["/opt/codespace-host/bin/codespace-host.sh"]
