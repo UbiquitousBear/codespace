@@ -75,7 +75,7 @@ main() {
 wait_for_docker() {
     log_info "waiting for Docker daemon"
     local attempts=0
-    while ! docker info >/dev/null 2>&1; do
+    while ! docker info >/tmp/docker-info.log 2>&1; do
         ((attempts++))
         if ((attempts > 60)); then
             log_error "Docker daemon not available after 60 seconds"
