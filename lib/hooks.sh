@@ -8,16 +8,17 @@
 # 4. postStartCommand - after container starts (every start)
 # 5. postAttachCommand - after user attaches (handled separately by IDE/Coder)
 
-# Track if this is first run (for postCreateCommand)
-FIRST_RUN_MARKER="/tmp/.devcontainer-first-run-${REPO_NAME}"
-
 run_lifecycle_hooks() {
     local container="$1"
 
     log_info "running lifecycle hooks"
 
+    # Track if this is first run (for postCreateCommand)
+    # Use container name which is always available
+    local first_run_marker="/tmp/.devcontainer-first-run-${container}"
+
     local is_first_run=false
-    if ! docker exec "${container}" test -f "${FIRST_RUN_MARKER}" 2>/dev/null; then
+    if ! docker exec "${container}" test -f "${first_run_marker}" 2>/dev/null; then
         is_first_run=true
     fi
 
@@ -39,7 +40,7 @@ run_lifecycle_hooks() {
 
     # Mark that we've done first run
     if [[ "${is_first_run}" == "true" ]]; then
-        docker exec "${container}" touch "${FIRST_RUN_MARKER}" 2>/dev/null || true
+        docker exec "${container}" touch "${first_run_marker}" 2>/dev/null || true
     fi
 
     log_info "lifecycle hooks complete"
