@@ -30,7 +30,7 @@ RUN chmod +x /opt/codespace-host/bin/* \
 
 # Coder binary should be added at build time or mounted
 # Example: COPY --from=coder /usr/bin/coder /usr/local/bin/coder
-ARG CODER_VERSION=2.16.0
+ARG CODER_VERSION=2.28.6
 RUN curl -fsSL "https://github.com/coder/coder/releases/download/v${CODER_VERSION}/coder_${CODER_VERSION}_linux_amd64.tar.gz" \
     | tar -xz -C /usr/local/bin coder \
     && chmod +x /usr/local/bin/coder
