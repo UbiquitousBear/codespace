@@ -6,7 +6,6 @@ RUN apk add --no-cache \
     curl \
     git \
     jq \
-    openssh-client \
     tar \
     gzip
 
@@ -38,4 +37,4 @@ ENV PATH="/opt/codespace-host/bin:${PATH}"
 ENV LOG_LEVEL="info"
 
 # Entrypoint
-ENTRYPOINT ["/opt/codespace-host/bin/codespace-host"]
+ENTRYPOINT ["/opt/codespace-host/bin/codespace-host.sh"]
