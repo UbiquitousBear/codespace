@@ -1,119 +1,106 @@
-#!/usr/bin/env bash
-# bin/codespace-host
+#!/bin/bash
+# codespace-host - Main entrypoint for dev container orchestration
+# Builds and runs a dev container from the project's devcontainer.json,
+# or falls back to a universal image if none exists.
 
 set -euo pipefail
 
-CODESPACE_ROOT="$(dirname "$(dirname "$(readlink -f "$0")")")"
-source "${CODESPACE_ROOT}/lib/config.sh"
-source "${CODESPACE_ROOT}/lib/build.sh"
-source "${CODESPACE_ROOT}/lib/features.sh"
-source "${CODESPACE_ROOT}/lib/container.sh"
-source "${CODESPACE_ROOT}/lib/hooks.sh"
-source "${CODESPACE_ROOT}/lib/expose.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="$(dirname "$SCRIPT_DIR")/lib"
+DEFAULTS_DIR="$(dirname "$SCRIPT_DIR")/defaults"
 
-# Configuration from environment (set by Coder/LinuxKit)
-WORKSPACE_PATH="${WORKSPACE_PATH:-/workspace}"
-WORKSPACE_NAME="${WORKSPACE_NAME:-workspace}"
-CONTAINER_NAME="devcontainer-${WORKSPACE_NAME}"
-REMOTE_USER="${REMOTE_USER:-}"
-LOG_LEVEL="${LOG_LEVEL:-info}"
+# Source libraries
+source "${LIB_DIR}/log.sh"
+source "${LIB_DIR}/config.sh"
+source "${LIB_DIR}/git.sh"
+source "${LIB_DIR}/devcontainer.sh"
+source "${LIB_DIR}/build.sh"
+source "${LIB_DIR}/features.sh"
+source "${LIB_DIR}/container.sh"
+source "${LIB_DIR}/hooks.sh"
+source "${LIB_DIR}/coder.sh"
 
-log() {
-    local level="$1"; shift
-    [[ "$LOG_LEVEL" == "debug" || "$level" != "debug" ]] && \
-        echo "[$(date -Iseconds)] [$level] $*" >&2
-}
+# Globals set by config/discovery
+REPO_URL=""
+BRANCH=""
+REPO_NAME=""
+WORKDIR=""
+CONTAINER_NAME=""
+IMAGE_REF=""
 
 main() {
-    log info "codespace-host starting"
-    log info "workspace: ${WORKSPACE_PATH}"
+    log_info "codespace-host starting"
 
-    # Wait for docker
+    # 1. Read configuration from /run/config
+    load_config
+
+    # 2. Wait for Docker daemon
     wait_for_docker
 
-    # 1. Discover devcontainer configuration
-    log info "discovering devcontainer config"
-    local config_dir config_file
-    if ! config_dir=$(discover_config_dir "${WORKSPACE_PATH}"); then
-        log info "no devcontainer config found, using universal"
-        config_dir="${CODESPACE_ROOT}/defaults/universal"
-    fi
-    config_file="${config_dir}/devcontainer.json"
-    log info "using config: ${config_file}"
+    # 3. Clone or update repository
+    setup_workspace
 
-    # 2. Parse configuration
-    parse_config "${config_file}"
+    # 4. Discover and parse devcontainer.json
+    discover_devcontainer "${WORKDIR}"
 
-    # 3. Build or pull image
-    log info "preparing image"
-    local image_ref
-    image_ref=$(prepare_image "${config_dir}")
-    log info "image ready: ${image_ref}"
+    # 5. Build or pull the image
+    IMAGE_REF=$(prepare_image "${WORKDIR}")
+    log_info "image ready: ${IMAGE_REF}"
 
-    # 4. Apply features (if any)
-    if [[ -n "${DEVCONTAINER_FEATURES:-}" ]]; then
-        log info "applying features"
-        image_ref=$(apply_features "${image_ref}")
+    # 6. Apply features if specified
+    if has_features; then
+        IMAGE_REF=$(apply_features "${IMAGE_REF}")
+        log_info "features applied: ${IMAGE_REF}"
     fi
 
-    # 5. Start the container
-    log info "starting container"
-    start_container "${image_ref}" "${CONTAINER_NAME}"
+    # 7. Fix workspace permissions for the container user
+    fix_workspace_permissions "${WORKDIR}"
 
-    # 6. Run lifecycle hooks
-    run_hooks "${CONTAINER_NAME}"
+    # 8. Start the dev container
+    CONTAINER_NAME="dev-${REPO_NAME}"
+    start_devcontainer "${IMAGE_REF}" "${CONTAINER_NAME}" "${WORKDIR}"
 
-    # 7. Start exposure services
-    log info "starting services"
-    start_ssh_proxy "${CONTAINER_NAME}" &
-    start_port_watcher "${CONTAINER_NAME}" &
+    # 9. Run lifecycle hooks
+    run_lifecycle_hooks "${CONTAINER_NAME}"
 
-    # 8. Signal ready
-    signal_ready
+    # 10. Setup and start Coder agent inside container
+    setup_coder_agent "${CONTAINER_NAME}"
 
-    log info "codespace-host ready"
+    log_info "codespace-host ready"
 
-    # Keep running - wait for container or signals
+    # 11. Keep running and handle shutdown
     wait_for_shutdown "${CONTAINER_NAME}"
 }
 
 wait_for_docker() {
-    log debug "waiting for docker daemon"
+    log_info "waiting for Docker daemon"
     local attempts=0
     while ! docker info >/dev/null 2>&1; do
         ((attempts++))
-        if ((attempts > 30)); then
-            log error "docker daemon not available"
+        if ((attempts > 60)); then
+            log_error "Docker daemon not available after 60 seconds"
             exit 1
         fi
         sleep 1
     done
-    log debug "docker ready"
-}
-
-signal_ready() {
-    # Signal to Coder that workspace is ready
-    # Could be a file touch, API call, or socket notification
-    touch /run/codespace-ready
-    
-    # If Coder agent expects an API call
-    if [[ -n "${CODER_AGENT_URL:-}" ]]; then
-        curl -sf -X POST "${CODER_AGENT_URL}/ready" || true
-    fi
+    log_debug "Docker ready"
 }
 
 wait_for_shutdown() {
     local container="$1"
-    
-    trap 'shutdown' TERM INT
-    
-    # Wait for container to exit or signal
+
+    trap 'shutdown "${container}"' TERM INT
+
+    # Wait for container to exit
     docker wait "${container}" 2>/dev/null || true
+
+    log_info "container exited"
 }
 
 shutdown() {
-    log info "shutting down"
-    docker stop "${CONTAINER_NAME}" 2>/dev/null || true
+    local container="$1"
+    log_info "shutting down"
+    docker stop -t 10 "${container}" 2>/dev/null || true
     exit 0
 }
 
