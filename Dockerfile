@@ -19,21 +19,15 @@ ARG ORAS_VERSION=1.3.0
 RUN curl -fsSL "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz" \
     | tar -xz -C /usr/local/bin oras
 
-# Copy codespace-host
 COPY bin/ /opt/codespace-host/bin/
 COPY lib/ /opt/codespace-host/lib/
 COPY defaults/ /opt/codespace-host/defaults/
 
-# Make scripts executable
 RUN chmod +x /opt/codespace-host/bin/* \
     && chmod +x /opt/codespace-host/lib/*.sh
 
-# Coder binary should be added at build time or mounted
-# Example: COPY --from=coder /usr/bin/coder /usr/local/bin/coder
 ARG CODER_VERSION=2.28.6
-RUN curl -fsSL "https://github.com/coder/coder/releases/download/v${CODER_VERSION}/coder_${CODER_VERSION}_linux_amd64.tar.gz" \
-    | tar -xz -C /usr/local/bin coder \
-    && chmod +x /usr/local/bin/coder
+RUN curl -fsSL https://coder.com/install.sh | sh -s -- --version ${CODER_VERSION}
 
 # Working directory
 WORKDIR /workspaces
