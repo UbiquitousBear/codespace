@@ -7,17 +7,17 @@ RUN apk add --no-cache \
     curl \
     docker-cli \
     docker-compose \
-    shadow
+    ca-certificates
 
-RUN groupadd -g 107 codespace && \
-    useradd -m -u 107 -g 107 -s /bin/bash codespace
+RUN addgroup -g 1000 codespace && \
+    adduser -D -u 1000 -G codespace -s /bin/bash codespace
 
-RUN mkdir -p /home/codespace && chown -R 107:107 /home/codespace
-
+# Install envbuilder (static binary)
+RUN curl -fsSL https://github.com/coder/envbuilder/releases/latest/download/envbuilder-linux-amd64 \
+      -o /usr/local/bin/envbuilder \
+ && chmod +x /usr/local/bin/envbuilder
 
 COPY init.sh /init.sh
 RUN chmod +x /init.sh
-
-USER codespace
 
 ENTRYPOINT ["/init.sh"]
