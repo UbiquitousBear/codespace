@@ -1,4 +1,4 @@
-FROM docker:27-dind
+FROM docker:29-dind
 
 # Install dependencies
 RUN apk add --no-cache \
