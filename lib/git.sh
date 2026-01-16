@@ -8,6 +8,9 @@ setup_workspace() {
     git config --global user.name "${GIT_NAME}"
     git config --global user.email "${GIT_EMAIL}"
     
+    # Disable filemode - virtiofs doesn't support chmod
+    git config --global core.filemode false
+    
     # Trust the workspace directory (git safe.directory)
     git config --global --add safe.directory "${WORKDIR}"
 
@@ -17,7 +20,7 @@ setup_workspace() {
         cat > ~/.git-credentials <<EOF
 https://oauth2:${GITHUB_TOKEN}@github.com
 EOF
-        chmod 600 ~/.git-credentials
+        chmod 600 ~/.git-credentials 2>/dev/null || true
     fi
 
     # Ensure /workspaces exists
@@ -46,15 +49,34 @@ clone_repo() {
         fi
     fi
 
-    if ! git clone --branch "${BRANCH}" --depth 1 "${clone_url}" "${WORKDIR}"; then
-        # Try without depth for branches that might not be at HEAD
+    # Clone to a temp directory first (avoids virtiofs chmod issues during clone)
+    local temp_dir="/tmp/clone-$$"
+    
+    log_debug "cloning to temp directory first"
+    if ! git clone --branch "${BRANCH}" --depth 1 "${clone_url}" "${temp_dir}"; then
         log_warn "shallow clone failed, trying full clone"
-        git clone --branch "${BRANCH}" "${clone_url}" "${WORKDIR}"
+        rm -rf "${temp_dir}"
+        if ! git clone --branch "${BRANCH}" "${clone_url}" "${temp_dir}"; then
+            log_error "git clone failed"
+            rm -rf "${temp_dir}"
+            exit 1
+        fi
     fi
+
+    # Move to final destination
+    log_debug "moving clone to workspace"
+    rm -rf "${WORKDIR}"
+    mv "${temp_dir}" "${WORKDIR}"
+    
+    # Ensure git config is set in the repo too
+    git -C "${WORKDIR}" config core.filemode false
 }
 
 update_repo() {
     cd "${WORKDIR}"
+
+    # Ensure filemode is disabled for this repo
+    git config core.filemode false
 
     # Fetch and reset to origin
     git fetch origin "${BRANCH}" --depth 1 2>/dev/null || git fetch origin "${BRANCH}"
