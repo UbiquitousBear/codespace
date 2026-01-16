@@ -53,12 +53,12 @@ main() {
         log_info "features applied: ${IMAGE_REF}"
     fi
 
-    # 7. Fix workspace permissions for the container user
-    fix_workspace_permissions "${WORKDIR}"
-
-    # 8. Start the dev container
+    # 7. Start the dev container
     CONTAINER_NAME="dev-${REPO_NAME}"
     start_devcontainer "${IMAGE_REF}" "${CONTAINER_NAME}" "${WORKDIR}"
+
+    # 8. Fix workspace permissions inside the container
+    fix_permissions_in_container "${CONTAINER_NAME}" "${WORKDIR}"
 
     # 9. Run lifecycle hooks
     run_lifecycle_hooks "${CONTAINER_NAME}"

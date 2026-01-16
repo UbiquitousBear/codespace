@@ -1,10 +1,6 @@
 #!/bin/bash
 # git.sh - Git clone and update operations
 
-# Target UID/GID for workspace files (should match container user)
-WORKSPACE_UID="${CONTAINER_USER_UID:-1000}"
-WORKSPACE_GID="${CONTAINER_USER_GID:-1000}"
-
 setup_workspace() {
     log_info "setting up workspace"
 
@@ -18,16 +14,14 @@ setup_workspace() {
     # Configure credential helper if we have a GitHub token
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
         git config --global credential.helper store
-        # For HTTPS clones, this will be used
         cat > ~/.git-credentials <<EOF
 https://oauth2:${GITHUB_TOKEN}@github.com
 EOF
         chmod 600 ~/.git-credentials
     fi
 
-    # Ensure /workspaces exists with correct ownership
+    # Ensure /workspaces exists
     mkdir -p /workspaces
-    chown "${WORKSPACE_UID}:${WORKSPACE_GID}" /workspaces
 
     if [[ ! -d "${WORKDIR}/.git" ]]; then
         log_info "cloning repository"
@@ -36,10 +30,6 @@ EOF
         log_info "updating existing repository"
         update_repo
     fi
-
-    # Fix ownership after clone/update
-    log_info "setting workspace ownership to ${WORKSPACE_UID}:${WORKSPACE_GID}"
-    chown -R "${WORKSPACE_UID}:${WORKSPACE_GID}" "${WORKDIR}"
 
     cd "${WORKDIR}"
     log_info "HEAD: $(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"

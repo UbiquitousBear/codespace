@@ -2,23 +2,25 @@
 # container.sh - Start and manage the dev container
 
 # Default UID/GID for devcontainer users (vscode, codespace, etc.)
-# These should match what's set in git.sh
 CONTAINER_USER_UID="${CONTAINER_USER_UID:-1000}"
 CONTAINER_USER_GID="${CONTAINER_USER_GID:-1000}"
 
 fix_workspace_permissions() {
     local workspace="$1"
+    # No-op on host side - virtiofs doesn't allow chown from host
+    # Permissions are fixed inside the container after start
+    log_debug "workspace permissions will be fixed inside container"
+}
 
-    # Safety net - ensure permissions are correct
-    # Primary ownership is set by git.sh after clone/update
-    local current_uid
-    current_uid=$(stat -c '%u' "${workspace}" 2>/dev/null || echo "unknown")
-    
-    if [[ "${current_uid}" != "${CONTAINER_USER_UID}" ]]; then
-        log_info "fixing workspace permissions: ${current_uid} -> ${CONTAINER_USER_UID}:${CONTAINER_USER_GID}"
-        chown -R "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "${workspace}"
-    else
-        log_debug "workspace permissions already correct (UID ${current_uid})"
+fix_permissions_in_container() {
+    local container="$1"
+    local workspace="$2"
+
+    log_info "fixing workspace permissions inside container"
+
+    # Run chown inside the container where we have permission
+    if ! docker exec "${container}" chown -R "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "${workspace}" 2>/dev/null; then
+        log_warn "could not fix workspace permissions - user may have issues"
     fi
 }
 
