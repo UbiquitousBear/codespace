@@ -9,7 +9,7 @@ RUN apk add --no-cache \
     openssh-client \
     tar \
     gzip \
-    nodejs-latest \
+    nodejs \
     npm
 
 # Optional: Install oras for dev container features support
