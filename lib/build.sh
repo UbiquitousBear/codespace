@@ -22,6 +22,7 @@ prepare_image() {
         pull_image "${image_ref}"
     fi
 
+    # IMPORTANT: this is now the *only* thing that goes to stdout
     echo "${image_ref}"
 }
 
@@ -30,7 +31,8 @@ pull_image() {
 
     log_info "pulling image: ${image}"
 
-    if ! docker pull "${image}"; then
+    # Send all docker pull output to stderr so it doesn't pollute $(prepare_image)
+    if ! docker pull "${image}" >&2; then
         log_error "failed to pull image: ${image}"
         exit 1
     fi
@@ -45,7 +47,6 @@ build_image() {
 
     # Context might reference parent directory (common pattern)
     if [[ "${DC_CONTEXT}" == ".." || "${DC_CONTEXT}" == "../"* ]]; then
-        # Resolve relative to config dir
         context="$(cd "${DC_CONFIG_DIR}" && cd "${DC_CONTEXT}" && pwd)"
     fi
 
@@ -63,7 +64,6 @@ build_image() {
     # Parse build args from JSON
     if [[ "${DC_BUILD_ARGS}" != "{}" ]]; then
         while IFS='=' read -r key value; do
-            # Expand variables in value
             value=$(expand_build_arg "${value}")
             build_args+=(--build-arg "${key}=${value}")
         done < <(echo "${DC_BUILD_ARGS}" | jq -r 'to_entries[] | "\(.key)=\(.value)"')
@@ -73,20 +73,22 @@ build_image() {
     export DOCKER_BUILDKIT=1
     build_args+=(--build-arg "BUILDKIT_INLINE_CACHE=1")
 
+    # Send all docker build output to stderr as well
     if ! docker build \
         -t "${tag}" \
         -f "${dockerfile}" \
         "${build_args[@]}" \
-        "${context}"; then
+        "${context}" >&2; then
 
         log_error "docker build failed"
 
-        # Fallback to universal
+        # Fallback to universal; only this echo goes to stdout
         log_warn "falling back to universal image"
         echo "mcr.microsoft.com/devcontainers/universal:2"
         return 0
     fi
 
+    # Only the final tag on stdout
     echo "${tag}"
 }
 
