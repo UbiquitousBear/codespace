@@ -78,6 +78,12 @@ start_devcontainer() {
     run_args+=("${image}")
     run_args+=(sleep infinity)
 
+    log_info "devcontainer image raw: '$(printf '%q' "$image")'"
+    log_debug "run_args as array:"
+    for i in "${!run_args[@]}"; do
+        log_debug "  [$i] = '$(printf '%q' "${run_args[$i]}")'"
+    done
+
     log_debug "docker run ${run_args[*]}"
 
     if ! docker run "${run_args[@]}" >/dev/null; then
