@@ -1,4 +1,4 @@
-FROM docker:29-dind
+FROM docker:27-dind
 
 # Install dependencies
 RUN apk add --no-cache \
@@ -6,6 +6,7 @@ RUN apk add --no-cache \
     curl \
     git \
     jq \
+    openssh-client \
     tar \
     gzip
 
@@ -27,9 +28,17 @@ RUN chmod +x /opt/codespace-host/bin/* \
 # Install Coder CLI using official install script
 # The script detects the platform and installs the appropriate binary
 ARG CODER_VERSION=2.28.6
-RUN curl -fsSL "https://github.com/coder/coder/releases/download/v2.28.6/coder_2.28.6_linux_amd64.tar.gz" \
-  -o coder.tar.gz
-tar -tzf coder.tar.gz
+
+RUN set -eux; \
+  curl -fsSL "https://github.com/coder/coder/releases/download/v${CODER_VERSION}/coder_${CODER_VERSION}_linux_amd64.tar.gz" \
+    -o /tmp/coder.tar.gz; \
+  mkdir -p /tmp/coder-extract; \
+  tar -xzf /tmp/coder.tar.gz -C /tmp/coder-extract; \
+  # adjust this mv if they ever change the layout:
+  mv /tmp/coder-extract/coder /usr/local/bin/coder || \
+    mv /tmp/coder-extract/coder_${CODER_VERSION}_linux_amd64/coder /usr/local/bin/coder; \
+  chmod +x /usr/local/bin/coder; \
+  rm -rf /tmp/coder.tar.gz /tmp/coder-extract
 
 # Working directory
 WORKDIR /workspaces
@@ -39,4 +48,4 @@ ENV PATH="/opt/codespace-host/bin:${PATH}"
 ENV LOG_LEVEL="info"
 
 # Entrypoint
-ENTRYPOINT ["/opt/codespace-host/bin/codespace-host.sh"]
+ENTRYPOINT ["/opt/codespace-host/bin/codespace-host"]
