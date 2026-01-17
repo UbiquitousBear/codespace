@@ -10,7 +10,9 @@ RUN apk add --no-cache \
     tar \
     gzip \
     nodejs \
-    npm
+    npm \
+    libc6-compat \
+    libstdc++
 
 # Optional: Install oras for dev container features support
 # This enables pulling OCI artifacts for features
@@ -42,7 +44,8 @@ RUN set -eux; \
   chmod +x /usr/local/bin/coder; \
   rm -rf /tmp/coder.tar.gz /tmp/coder-extract
 
-RUN curl -fsSL https://code-server.dev/install.sh | sh;rm -rf /root/.cache
+RUN curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/usr/local && \
+    rm -rf /root/.cache
 
 # Working directory
 WORKDIR /workspaces
