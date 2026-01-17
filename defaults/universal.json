@@ -1,6 +1,6 @@
 {
     "name": "Universal",
-    "image": "mcr.microsoft.com/devcontainers/universal:linux",
+    "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
     "features": {},
     "remoteUser": "codespace",
     "postCreateCommand": "echo 'Welcome to your codespace!'",

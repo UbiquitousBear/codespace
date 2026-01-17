@@ -11,6 +11,7 @@ RUN apk add --no-cache \
     gzip \
     nodejs \
     npm \
+    gcompat \
     libc6-compat \
     libstdc++
 
@@ -49,8 +50,6 @@ RUN curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone
 
 # Working directory
 WORKDIR /workspaces
-
-RUN docker pull mcr.microsoft.com/vscode/devcontainers/universal:linux
 
 # Environment
 ENV PATH="/opt/codespace-host/bin:${PATH}"

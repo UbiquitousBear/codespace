@@ -83,7 +83,7 @@ DEVCONTAINER_DIR=".devcontainer"
 DEVCONTAINER_DOCKERFILE="${DEVCONTAINER_DIR}/Dockerfile"
 DEVCONTAINER_JSON="${DEVCONTAINER_DIR}/devcontainer.json"
 
-BASE_DEFAULT_IMAGE="mcr.microsoft.com/devcontainers/universal:linux"
+BASE_DEFAULT_IMAGE="mcr.microsoft.com/devcontainers/base:ubuntu"
 
 has_devcontainer=false
 [ -f "${DEVCONTAINER_DOCKERFILE}" ] && has_devcontainer=true

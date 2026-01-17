@@ -18,7 +18,7 @@ prepare_image() {
     else
         # Fallback to universal
         log_warn "no image or Dockerfile specified, using universal"
-        image_ref="mcr.microsoft.com/devcontainers/universal:linux"
+        image_ref="mcr.microsoft.com/devcontainers/base:ubuntu"
         pull_image "${image_ref}"
     fi
 
@@ -84,7 +84,7 @@ build_image() {
 
         # Fallback to universal; only this echo goes to stdout
         log_warn "falling back to universal image"
-        echo "mcr.microsoft.com/devcontainers/universal:2"
+        echo "mcr.microsoft.com/devcontainers/base:ubuntu"
         return 0
     fi
 
