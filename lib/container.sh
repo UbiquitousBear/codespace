@@ -29,7 +29,22 @@ start_devcontainer() {
     local name="$2"
     local workspace="$3"
 
-    log_info "starting dev container: ${name}"
+    # Normalize: strip CR/LF
+    image="$(printf '%s' "$image" | tr -d '\r\n')"
+
+    # Trim surrounding whitespace
+    image="$(echo "$image" | xargs)"
+
+    # Strip *all* quote characters – handles "…", '…', …''
+    image="${image//\"/}"
+    image="${image//\'/}"
+
+    if [[ -z "$image" ]]; then
+        log_error "devcontainer image is empty after normalization"
+        exit 1
+    fi
+
+    log_info "starting dev container: ${name} with image: ${image}"
 
     # Remove existing container if present
     if docker ps -a --format '{{.Names}}' | grep -q "^${name}\$"; then
