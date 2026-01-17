@@ -27,7 +27,7 @@ RUN chmod +x /opt/codespace-host/bin/* \
 # Install Coder CLI using official install script
 # The script detects the platform and installs the appropriate binary
 ARG CODER_VERSION=2.28.6
-curl -fsSL "https://github.com/coder/coder/releases/download/v2.28.6/coder_2.28.6_linux_amd64.tar.gz" \
+RUN curl -fsSL "https://github.com/coder/coder/releases/download/v2.28.6/coder_2.28.6_linux_amd64.tar.gz" \
   -o coder.tar.gz
 tar -tzf coder.tar.gz
 
