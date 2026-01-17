@@ -70,6 +70,10 @@ start_devcontainer() {
     run_args+=(-v "${workspace}:${workspace}:cached")
     run_args+=(-w "${workspace}")
 
+    if [[ -S /var/run/docker.sock ]]; then
+        run_args+=(-v "/var/run/docker.sock:/var/run/docker.sock")
+    fi
+
     # Config mount (for tokens)
     run_args+=(-v "/run/config:/run/config:ro")
 
@@ -191,6 +195,9 @@ add_environment_vars() {
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
         args+=(-e "GITHUB_TOKEN=${GITHUB_TOKEN}")
         args+=(-e "GH_ENTERPRISE_TOKEN=${GITHUB_TOKEN}")
+    fi
+    if [[ -n "${CODER_AGENT_URL:-}" ]]; then
+        args+=(-e "CODER_AGENT_URL=${CODER_AGENT_URL}")
     fi
 
     # Remote user for scripts

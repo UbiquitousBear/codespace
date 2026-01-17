@@ -9,6 +9,7 @@ export BRANCH=""
 export GIT_NAME=""
 export GIT_EMAIL=""
 export CODER_AGENT_TOKEN=""
+export CODER_AGENT_URL=""
 export GITHUB_TOKEN=""
 export GH_ENTERPRISE_TOKEN=""
 
@@ -41,6 +42,7 @@ load_config() {
 
     # Tokens
     CODER_AGENT_TOKEN="$(read_config_file "coder-token")"
+    CODER_AGENT_URL="$(read_config_file "coder-url")"
     GITHUB_TOKEN="$(read_config_file "github-token")"
     GH_ENTERPRISE_TOKEN="${GITHUB_TOKEN}"
 
@@ -51,7 +53,7 @@ load_config() {
 
     # Export for child processes
     export REPO_URL BRANCH GIT_NAME GIT_EMAIL
-    export CODER_AGENT_TOKEN GITHUB_TOKEN GH_ENTERPRISE_TOKEN
+    export CODER_AGENT_TOKEN CODER_AGENT_URL GITHUB_TOKEN GH_ENTERPRISE_TOKEN
     export REPO_NAME WORKDIR
 
     log_info "repo: ${REPO_URL}"

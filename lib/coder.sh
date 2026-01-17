@@ -21,6 +21,12 @@ setup_coder_agent() {
         exit 1
     fi
 
+    # Verify we have the url
+    if [[ -z "${CODER_AGENT_URL:-}" ]]; then
+        log_error "CODER_AGENT_URL not set (missing /run/config/coder-url)"
+        exit 1
+    fi
+
     # Copy coder binary into container
     log_info "copying coder binary into container"
     if ! docker cp "${CODER_BIN}" "${container}:/usr/local/bin/coder"; then
@@ -79,7 +85,10 @@ fi
 
 # Coder agent URL (if not using default)
 if [ -f /run/config/coder-url ]; then
-    export CODER_AGENT_URL="$(cat /run/config/coder-url)"
+    CODER_AGENT_URL_FILE="$(cat /run/config/coder-url)"
+    if [ -n "$CODER_AGENT_URL_FILE" ]; then
+        export CODER_AGENT_URL="$CODER_AGENT_URL_FILE"
+    fi
 fi
 
 echo "[coder] Starting Coder agent..."

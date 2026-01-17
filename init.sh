@@ -19,10 +19,12 @@ GIT_NAME="$(cat "${CONFIG_DIR}/git-name" 2>/dev/null || echo "Coder User")"
 GIT_EMAIL="$(cat "${CONFIG_DIR}/git-email" 2>/dev/null || echo "coder@example.com")"
 CODER_TOKEN="$(cat "${CONFIG_DIR}/coder-token" 2>/dev/null || true)"
 GITHUB_TOKEN="$(cat "${CONFIG_DIR}/github-token" 2>/dev/null || true)"
+CODER_URL="$(cat "${CONFIG_DIR}/coder-url" 2>/dev/null || true)"
 
 # These envs matter inside the agent & for user tools, so we’ll also pass
 # them into the devcontainer via docker run.
 export CODER_AGENT_TOKEN="${CODER_TOKEN:-}"
+export CODER_AGENT_URL="${CODER_URL:-}"
 export GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 export GH_ENTERPRISE_TOKEN="${GITHUB_TOKEN:-}"
 
@@ -172,7 +174,14 @@ if [ -n "${DEV_IMAGE_TAG:-}" ]; then
       exit 1
     fi
 
+    CODER_AGENT_URL="$(cat /run/config/coder-url 2>/dev/null || echo "")"
+    if [ -z "$CODER_AGENT_URL" ]; then
+      echo "[devcontainer] ERROR: CODER_AGENT_URL missing; cannot start agent." >&2
+      exit 1
+    fi
+
     export CODER_AGENT_TOKEN
+    export CODER_AGENT_URL
     # Optional: propagate GH vars into agent env too
     export GITHUB_TOKEN="$(cat /run/config/github-token 2>/dev/null || echo "")"
     export GH_ENTERPRISE_TOKEN="$GITHUB_TOKEN"
