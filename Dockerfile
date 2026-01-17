@@ -42,8 +42,7 @@ RUN set -eux; \
   chmod +x /usr/local/bin/coder; \
   rm -rf /tmp/coder.tar.gz /tmp/coder-extract
 
-RUN curl -fsSL https://code-server.dev/install.sh | sh && \
-    rm -rf /root/.cache
+RUN curl -fsSL https://code-server.dev/install.sh | sh;rm -rf /root/.cache
 
 # Working directory
 WORKDIR /workspaces
