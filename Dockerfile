@@ -8,7 +8,9 @@ RUN apk add --no-cache \
     jq \
     openssh-client \
     tar \
-    gzip
+    gzip \
+    nodejs-latest \
+    npm
 
 # Optional: Install oras for dev container features support
 # This enables pulling OCI artifacts for features
