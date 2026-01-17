@@ -156,7 +156,7 @@ parse_devcontainer_json() {
 }
 
 use_universal_defaults() {
-    DC_IMAGE="mcr.microsoft.com/devcontainers/universal:2"
+    DC_IMAGE="mcr.microsoft.com/devcontainers/universal:linux"
     DC_DOCKERFILE=""
     DC_CONTEXT="."
     DC_BUILD_ARGS="{}"

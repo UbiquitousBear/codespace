@@ -91,6 +91,52 @@ if [ -f /run/config/coder-url ]; then
     fi
 fi
 
+# Start VS Code server (code-server) for Coder app
+if [ "${CODER_ENABLE_VSCODE:-1}" = "1" ]; then
+    USER_NAME="$(id -un 2>/dev/null || echo "codespace")"
+    if [ -z "${HOME:-}" ]; then
+        if [ -d "/home/${USER_NAME}" ]; then
+            HOME="/home/${USER_NAME}"
+        else
+            HOME="/root"
+        fi
+    fi
+    export HOME
+    export PATH="${HOME}/.local/bin:${PATH}"
+
+    VSCODE_PORT="${CODER_VSCODE_PORT:-13337}"
+    CODE_SERVER_BIN="${CODER_VSCODE_BIN:-}"
+
+    if [ -n "${CODE_SERVER_BIN}" ] && [ ! -x "${CODE_SERVER_BIN}" ]; then
+        echo "[coder] WARN: CODER_VSCODE_BIN is not executable: ${CODE_SERVER_BIN}"
+        CODE_SERVER_BIN=""
+    fi
+
+    if [ -z "${CODE_SERVER_BIN}" ]; then
+        if command -v code-server >/dev/null 2>&1; then
+            CODE_SERVER_BIN="$(command -v code-server)"
+        elif [ -x "${HOME}/.local/bin/code-server" ]; then
+            CODE_SERVER_BIN="${HOME}/.local/bin/code-server"
+        fi
+    fi
+
+    if [ -n "${CODE_SERVER_BIN}" ]; then
+        if pgrep -f "code-server.*${VSCODE_PORT}" >/dev/null 2>&1; then
+            echo "[coder] code-server already running on port ${VSCODE_PORT}"
+        else
+            echo "[coder] Starting code-server on port ${VSCODE_PORT}..."
+            "${CODE_SERVER_BIN}" \
+                --bind-addr "127.0.0.1:${VSCODE_PORT}" \
+                --auth none \
+                --disable-telemetry \
+                --disable-update-check \
+                >/tmp/code-server.log 2>&1 &
+        fi
+    else
+        echo "[coder] WARN: code-server not found; ensure it is installed in the devcontainer image."
+    fi
+fi
+
 echo "[coder] Starting Coder agent..."
 exec /usr/local/bin/coder agent
 '
