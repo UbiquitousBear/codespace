@@ -1,19 +1,39 @@
-FROM docker:27-dind
+FROM ubuntu:26.04
+
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Install dependencies
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
+    ca-certificates \
     curl \
     git \
+    gnupg \
     jq \
+    lsb-release \
     openssh-client \
     tar \
     gzip \
+    iproute2 \
+    iptables \
     nodejs \
     npm \
-    gcompat \
-    libc6-compat \
-    libstdc++
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Docker Engine (for dind)
+RUN set -eux; \
+    install -m 0755 -d /etc/apt/keyrings; \
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg; \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo \"$VERSION_CODENAME\") stable" \
+      > /etc/apt/sources.list.d/docker.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      docker-ce \
+      docker-ce-cli \
+      containerd.io \
+      docker-buildx-plugin \
+      docker-compose-plugin; \
+    rm -rf /var/lib/apt/lists/*
 
 # Optional: Install oras for dev container features support
 # This enables pulling OCI artifacts for features
@@ -56,4 +76,4 @@ ENV PATH="/opt/codespace-host/bin:${PATH}"
 ENV LOG_LEVEL="info"
 
 # Entrypoint
-ENTRYPOINT ["/opt/codespace-host/bin/codespace-host"]
+ENTRYPOINT ["/opt/codespace-host/bin/codespace-host-entrypoint"]
