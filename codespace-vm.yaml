@@ -128,6 +128,10 @@ services:
 files:
   - path: /var/lib/docker
     directory: true
+  - path: /workspaces
+    directory: true
+  - path: /run/config
+    directory: true
   - path: /etc/codespace-version
     contents: "__CODESPACE_VERSION__"
   - path: /etc/docker/daemon.json
