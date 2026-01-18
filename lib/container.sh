@@ -78,7 +78,14 @@ start_devcontainer() {
     run_args+=(--network host)
 
     # Workspace mount
-    run_args+=(-v "${workspace}:${workspace}:cached")
+    local workspace_mount_source="${workspace}"
+    local workspace_mount_target="${workspace}"
+    if [[ "${workspace}" == /workspaces/* ]]; then
+        workspace_mount_source="/workspaces"
+        workspace_mount_target="/workspaces"
+        log_debug "mounting workspace root to avoid missing subdir in daemon namespace"
+    fi
+    run_args+=(-v "${workspace_mount_source}:${workspace_mount_target}:cached")
     run_args+=(-w "${workspace}")
 
     if [[ -S /var/run/docker.sock ]]; then

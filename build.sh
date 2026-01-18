@@ -33,3 +33,4 @@ rm -f codespace-vm-kernel codespace-vm-initrd.img codespace-vm-cmdline
 
 # 3) Build and push VM image with kernel/initrd (amd64)
 docker buildx build --platform linux/amd64 -t "${VM_IMAGE}" -f ./Containerfile . --push
+rm -f codespace-vm-kernel codespace-vm-initrd.img codespace-vm-cmdline
