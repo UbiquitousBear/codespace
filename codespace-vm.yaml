@@ -33,6 +33,14 @@ onboot:
     image: linuxkit/mount:bd1c3bb45e48e68e47a9456d1669f7119f855184
     command: ["/usr/bin/mountie", "/var/lib/docker"]
 
+  - name: mount-workspaces
+    image: linuxkit/mount:bd1c3bb45e48e68e47a9456d1669f7119f855184
+    command: ["/usr/bin/mountie", "-t", "virtiofs", "workspaces", "/workspaces"]
+
+  - name: mount-config
+    image: linuxkit/mount:bd1c3bb45e48e68e47a9456d1669f7119f855184
+    command: ["/usr/bin/mountie", "-t", "virtiofs", "config", "/run/config"]
+
 services:
   - name: getty
     image: linuxkit/getty:a86d74c8f89be8956330c3b115b0b1f2e09ef6e0
@@ -50,6 +58,8 @@ services:
     binds:
       - /etc/resolv.conf:/etc/resolv.conf
       - /var/lib/docker:/var/lib/docker
+      - /workspaces:/workspaces
+      - /run/config:/run/config:ro
       - /lib/modules:/lib/modules
       - /etc/docker/daemon.json:/etc/docker/daemon.json
       - /var/run:/var/run
@@ -91,12 +101,6 @@ services:
       fi
 
       /bin/busybox mkdir -p /workspaces /run/config
-
-      echo "[workspace] mounting virtiofs workspaces -> /workspaces"
-      mount -t virtiofs workspaces /workspaces
-
-      echo "[workspace] mounting virtiofs config -> /run/config"
-      mount -t virtiofs config /run/config
 
       echo "[workspace] final mount table:"
       mount | grep -E 'virtiofs|workspaces|config|/var/lib' || echo "[workspace] no virtiofs mounts?"
