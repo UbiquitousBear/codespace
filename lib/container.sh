@@ -77,11 +77,18 @@ start_devcontainer() {
     # Network mode - host for simplicity with Coder
     run_args+=(--network host)
 
+    local docker_mount_root="/workspaces"
+    local config_mount_source="/run/config"
+    if [[ -n "${DOCKER_HOST:-}" ]]; then
+        docker_mount_root="/var/workspaces"
+        config_mount_source="/var/config"
+    fi
+
     # Workspace mount
     local workspace_mount_source="${workspace}"
     local workspace_mount_target="${workspace}"
     if [[ "${workspace}" == /workspaces/* ]]; then
-        workspace_mount_source="/workspaces"
+        workspace_mount_source="${docker_mount_root}"
         workspace_mount_target="/workspaces"
         log_debug "mounting workspace root to avoid missing subdir in daemon namespace"
     fi
@@ -93,7 +100,7 @@ start_devcontainer() {
     fi
 
     # Config mount (for tokens)
-    run_args+=(-v "/run/config:/run/config:ro")
+    run_args+=(-v "${config_mount_source}:/run/config:ro")
 
     # Additional mounts from devcontainer.json
     add_configured_mounts run_args

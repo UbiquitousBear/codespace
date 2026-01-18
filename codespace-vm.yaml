@@ -45,8 +45,6 @@ services:
     binds:
       - /etc/resolv.conf:/etc/resolv.conf
       - /var/lib/docker:/var/lib/docker
-      - /workspaces:/workspaces
-      - /run/config:/run/config
       - /lib/modules:/lib/modules
       - /etc/docker/daemon.json:/etc/docker/daemon.json
       - /var/run:/var/run
@@ -55,10 +53,11 @@ services:
     - -c
     - |
       set -eux
-      mkdir -p /workspaces /run/config
-      mount -t virtiofs workspaces /workspaces
-      mount -t virtiofs config /run/config
+      mkdir -p /var/workspaces /var/config
+      mount -t virtiofs workspaces /var/workspaces
+      mount -t virtiofs config /var/config
       mount | grep -E 'virtiofs|workspaces|config' || true
+      ls -la /var/workspaces || true
       exec /usr/local/bin/docker-init /usr/local/bin/dockerd
 
   - name: workspace
@@ -96,13 +95,19 @@ services:
         echo "[workspace] codespace-host version: unknown"
       fi
 
-      /bin/busybox mkdir -p /workspaces /run/config
+      /bin/busybox mkdir -p /var/workspaces /var/config /workspaces /run/config
 
-      echo "[workspace] mounting virtiofs workspaces -> /workspaces"
-      mount -t virtiofs workspaces /workspaces
+      echo "[workspace] mounting virtiofs workspaces -> /var/workspaces"
+      mount -t virtiofs workspaces /var/workspaces
 
-      echo "[workspace] mounting virtiofs config -> /run/config"
-      mount -t virtiofs config /run/config
+      echo "[workspace] mounting virtiofs config -> /var/config"
+      mount -t virtiofs config /var/config
+
+      echo "[workspace] binding /var/workspaces -> /workspaces"
+      mount --bind /var/workspaces /workspaces
+
+      echo "[workspace] binding /var/config -> /run/config"
+      mount --bind /var/config /run/config
 
       echo "[workspace] final mount table:"
       mount | grep -E 'virtiofs|workspaces|config|/var/lib' || echo "[workspace] no virtiofs mounts?"
