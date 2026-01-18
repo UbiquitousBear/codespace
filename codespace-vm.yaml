@@ -27,17 +27,6 @@ onboot:
     image: linuxkit/mount:bd1c3bb45e48e68e47a9456d1669f7119f855184
     command: ["/usr/bin/mountie", "/var/lib/docker"]
 
-  - name: mount-workspaces
-    image: linuxkit/init:b5506cc74a6812dc40982cacfd2f4328f8a4b12a
-    capabilities:
-      - CAP_SYS_ADMIN
-    command: ["/bin/sh", "-c", "/bin/busybox mkdir -p /workspaces && /bin/busybox mount -t virtiofs workspaces /workspaces"]
-
-  - name: mount-config
-    image: linuxkit/init:b5506cc74a6812dc40982cacfd2f4328f8a4b12a
-    capabilities:
-      - CAP_SYS_ADMIN
-    command: ["/bin/sh", "-c", "/bin/busybox mkdir -p /run/config && /bin/busybox mount -t virtiofs config /run/config"]
 
 services:
   - name: getty
@@ -56,12 +45,18 @@ services:
     binds:
       - /etc/resolv.conf:/etc/resolv.conf
       - /var/lib/docker:/var/lib/docker
-      - /workspaces:/workspaces
-      - /run/config:/run/config:ro
       - /lib/modules:/lib/modules
       - /etc/docker/daemon.json:/etc/docker/daemon.json
       - /var/run:/var/run
-    command: ["/usr/local/bin/docker-init", "/usr/local/bin/dockerd"]
+    command:
+    - /bin/sh
+    - -c
+    - |
+      set -e
+      mkdir -p /workspaces /run/config
+      mount -t virtiofs workspaces /workspaces
+      mount -t virtiofs config /run/config
+      exec /usr/local/bin/docker-init /usr/local/bin/dockerd
 
   - name: workspace
     image: "__CODESPACE_HOST_IMAGE__"
@@ -100,6 +95,12 @@ services:
 
       /bin/busybox mkdir -p /workspaces /run/config
 
+      echo "[workspace] mounting virtiofs workspaces -> /workspaces"
+      mount -t virtiofs workspaces /workspaces
+
+      echo "[workspace] mounting virtiofs config -> /run/config"
+      mount -t virtiofs config /run/config
+
       echo "[workspace] final mount table:"
       mount | grep -E 'virtiofs|workspaces|config|/var/lib' || echo "[workspace] no virtiofs mounts?"
 
@@ -125,10 +126,6 @@ services:
 
 files:
   - path: /var/lib/docker
-    directory: true
-  - path: /workspaces
-    directory: true
-  - path: /run/config
     directory: true
   - path: /etc/codespace-version
     contents: "__CODESPACE_VERSION__"
