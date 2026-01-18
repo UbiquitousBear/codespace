@@ -52,10 +52,11 @@ services:
     - /bin/sh
     - -c
     - |
-      set -e
+      set -eux
       mkdir -p /workspaces /run/config
       mount -t virtiofs workspaces /workspaces
       mount -t virtiofs config /run/config
+      mount | grep -E 'virtiofs|workspaces|config' || true
       exec /usr/local/bin/docker-init /usr/local/bin/dockerd
 
   - name: workspace
