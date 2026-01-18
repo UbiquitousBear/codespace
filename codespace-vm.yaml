@@ -13,10 +13,10 @@ onboot:
     image: linuxkit/sysctl:43ac1d39da329c3567fcb9689e5ca99de6d169b6
 
   - name: version
-    image: linuxkit/sysctl:43ac1d39da329c3567fcb9689e5ca99de6d169b6
+    image: linuxkit/init:b5506cc74a6812dc40982cacfd2f4328f8a4b12a
     binds:
-      - /etc/codespace-version:/etc/codespace-version:ro
-    command: ["/bin/sh", "-c", "/bin/busybox echo [linuxkit] version: $(/bin/busybox cat /etc/codespace-version 2>/dev/null || /bin/busybox echo unknown)"]
+      - /run/codespace-version:/run/codespace-version:ro
+    command: ["/bin/sh", "-c", "/bin/busybox echo [linuxkit] version: $(/bin/busybox cat /run/codespace-version 2>/dev/null || /bin/busybox echo unknown)"]
 
   - name: sysfs
     image: linuxkit/sysfs:6d5bd933762f6b216744c711c6e876756cee9600
@@ -34,12 +34,12 @@ onboot:
     command: ["/usr/bin/mountie", "/var/lib/docker"]
 
   - name: mount-workspaces
-    image: linuxkit/mount:bd1c3bb45e48e68e47a9456d1669f7119f855184
-    command: ["/usr/bin/mountie", "-t", "virtiofs", "workspaces", "/workspaces"]
+    image: linuxkit/init:b5506cc74a6812dc40982cacfd2f4328f8a4b12a
+    command: ["/bin/sh", "-c", "/bin/busybox mount -t virtiofs workspaces /workspaces"]
 
   - name: mount-config
-    image: linuxkit/mount:bd1c3bb45e48e68e47a9456d1669f7119f855184
-    command: ["/usr/bin/mountie", "-t", "virtiofs", "config", "/run/config"]
+    image: linuxkit/init:b5506cc74a6812dc40982cacfd2f4328f8a4b12a
+    command: ["/bin/sh", "-c", "/bin/busybox mount -t virtiofs config /run/config"]
 
 services:
   - name: getty
@@ -133,6 +133,8 @@ files:
   - path: /run/config
     directory: true
   - path: /etc/codespace-version
+    contents: "__CODESPACE_VERSION__"
+  - path: /run/codespace-version
     contents: "__CODESPACE_VERSION__"
   - path: /etc/docker/daemon.json
     contents: |
