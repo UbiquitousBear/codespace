@@ -5,6 +5,12 @@
 CONTAINER_USER_UID="${CONTAINER_USER_UID:-107}"
 CONTAINER_USER_GID="${CONTAINER_USER_GID:-107}"
 CONTAINER_NEEDS_INIT_EXEC="false"
+CONTAINER_NEEDS_INIT_STAGE="false"
+CONTAINER_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CODESPACE_HOST_ROOT="$(dirname "${CONTAINER_LIB_DIR}")"
+WORKSPACE_INIT_SOURCE="${CODESPACE_HOST_ROOT}/init/workspace-init.sh"
+WORKSPACE_INIT_DEST_DIR="/tmp/codespace-init"
+WORKSPACE_INIT_DEST="${WORKSPACE_INIT_DEST_DIR}/workspace-init.sh"
 
 fix_workspace_permissions() {
     local workspace="$1"
@@ -48,6 +54,7 @@ start_devcontainer() {
     log_info "starting dev container: ${name} with image: ${image}"
 
     CONTAINER_NEEDS_INIT_EXEC="false"
+    CONTAINER_NEEDS_INIT_STAGE="false"
 
     # Remove existing container if present
     if docker ps -a --format '{{.Names}}' | grep -q "^${name}\$"; then
@@ -81,9 +88,6 @@ start_devcontainer() {
     # Config mount (for tokens)
     run_args+=(-v "/run/config:/run/config:ro")
 
-    # Init script mount (workspace-init)
-    run_args+=(-v "/opt/codespace-host/init:/opt/codespace-init:ro")
-
     # Additional mounts from devcontainer.json
     add_configured_mounts run_args
 
@@ -102,14 +106,18 @@ start_devcontainer() {
 
     # Image and command
     run_args+=(--user "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}")
+    local cmd_args=()
     if image_has_entrypoint_or_cmd "${image}"; then
         log_info "image has entrypoint/cmd; using image defaults and starting workspace init via exec"
         CONTAINER_NEEDS_INIT_EXEC="true"
     else
-        log_info "image has no entrypoint/cmd (or only a shell); using workspace-init as entrypoint"
-        run_args+=(--entrypoint "/opt/codespace-init/workspace-init.sh")
+        log_info "image has no entrypoint/cmd (or only a shell); waiting to exec workspace-init (coder agent stays PID 1)"
+        CONTAINER_NEEDS_INIT_STAGE="true"
+        run_args+=(--entrypoint "/bin/sh")
+        cmd_args+=("-c" "while [ ! -x ${WORKSPACE_INIT_DEST} ]; do sleep 0.2; done; exec ${WORKSPACE_INIT_DEST}")
     fi
     run_args+=("${image}")
+    run_args+=("${cmd_args[@]}")
 
     log_info "devcontainer image raw: '$(printf '%q' "$image")'"
     log_debug "run_args as array:"
@@ -164,8 +172,21 @@ start_devcontainer() {
     fi
 
     if [[ "${use_init}" == "false" ]]; then
-        if ! docker run "${run_args[@]}" >/dev/null 2>&1; then
+        local errexit_set=0
+        case $- in
+            *e*) errexit_set=1 ;;
+        esac
+        if ((errexit_set)); then
+            set +e
+        fi
+        run_output=$(docker run "${run_args[@]}" 2>&1)
+        run_status=$?
+        if ((errexit_set)); then
+            set -e
+        fi
+        if ((run_status != 0)); then
             log_error "failed to start container"
+            log_error "${run_output}"
             exit 1
         fi
     fi
@@ -183,6 +204,13 @@ start_devcontainer() {
     done
 
     log_info "container started"
+
+    if [[ "${CONTAINER_NEEDS_INIT_STAGE}" == "true" && "${CONTAINER_NEEDS_INIT_EXEC}" != "true" ]]; then
+        if ! stage_workspace_init "${name}"; then
+            log_error "failed to stage workspace init script for entrypointless image"
+            exit 1
+        fi
+    fi
 }
 
 add_configured_mounts() {
@@ -275,8 +303,14 @@ start_workspace_init_exec() {
     local container="$1"
 
     log_info "starting workspace services inside container"
+
+    if ! stage_workspace_init "${container}"; then
+        log_warn "failed to stage workspace-init inside container"
+        return
+    fi
+
     if ! docker exec -d -u "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" \
-        "${container}" /bin/sh -c "/opt/codespace-init/workspace-init.sh >>/tmp/workspace-init.log 2>&1" >/dev/null 2>&1; then
+        "${container}" /bin/sh -c "${WORKSPACE_INIT_DEST} >>/tmp/workspace-init.log 2>&1" >/dev/null 2>&1; then
         log_warn "failed to start workspace init via exec"
         return
     fi
@@ -287,6 +321,27 @@ start_workspace_init_exec() {
     else
         log_warn "coder agent not detected yet; check /tmp/workspace-init.log in the devcontainer"
     fi
+}
+
+stage_workspace_init() {
+    local container="$1"
+
+    if [[ ! -f "${WORKSPACE_INIT_SOURCE}" ]]; then
+        log_error "workspace init script not found at ${WORKSPACE_INIT_SOURCE}"
+        return 1
+    fi
+
+    if ! docker exec -u 0 "${container}" /bin/sh -c "mkdir -p '${WORKSPACE_INIT_DEST_DIR}'" >/dev/null 2>&1; then
+        log_warn "failed to create workspace init directory in container"
+        return 1
+    fi
+
+    if ! docker exec -i -u 0 "${container}" /bin/sh -c "cat > '${WORKSPACE_INIT_DEST}' && chmod +x '${WORKSPACE_INIT_DEST}'" < "${WORKSPACE_INIT_SOURCE}"; then
+        log_warn "failed to copy workspace init script into container"
+        return 1
+    fi
+
+    return 0
 }
 
 add_environment_vars() {
