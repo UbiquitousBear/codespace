@@ -29,10 +29,14 @@ onboot:
 
   - name: mount-workspaces
     image: linuxkit/init:b5506cc74a6812dc40982cacfd2f4328f8a4b12a
+    capabilities:
+      - CAP_SYS_ADMIN
     command: ["/bin/sh", "-c", "/bin/busybox mkdir -p /workspaces && /bin/busybox mount -t virtiofs workspaces /workspaces"]
 
   - name: mount-config
     image: linuxkit/init:b5506cc74a6812dc40982cacfd2f4328f8a4b12a
+    capabilities:
+      - CAP_SYS_ADMIN
     command: ["/bin/sh", "-c", "/bin/busybox mkdir -p /run/config && /bin/busybox mount -t virtiofs config /run/config"]
 
 services:
