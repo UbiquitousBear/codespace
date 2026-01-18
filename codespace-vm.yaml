@@ -1,0 +1,140 @@
+kernel:
+  image: shamilnunhuck/kernel:6.12.59
+  cmdline: "console=ttyS0 console=tty0"
+
+init:
+  - linuxkit/init:b5506cc74a6812dc40982cacfd2f4328f8a4b12a
+  - linuxkit/runc:9442aa234715e751a16144f1d4ae3fd1a00fd492
+  - linuxkit/containerd:ba19f64efd3331a8fd0a33e00eabd14f6ee1780e
+  - linuxkit/ca-certificates:256f1950df59f2f209e9f0b81374177409eb11de
+
+onboot:
+  - name: sysctl
+    image: linuxkit/sysctl:43ac1d39da329c3567fcb9689e5ca99de6d169b6
+
+  - name: version
+    image: linuxkit/sysctl:43ac1d39da329c3567fcb9689e5ca99de6d169b6
+    binds:
+      - /etc/codespace-version:/etc/codespace-version:ro
+    command: ["/bin/sh", "-c", "/bin/busybox echo [linuxkit] version: $(/bin/busybox cat /etc/codespace-version 2>/dev/null || /bin/busybox echo unknown)"]
+
+  - name: sysfs
+    image: linuxkit/sysfs:6d5bd933762f6b216744c711c6e876756cee9600
+
+  - name: dhcpcd
+    image: linuxkit/dhcpcd:b87e9ececac55a65eaa592f4dd8b4e0c3009afdb
+    command: ["/sbin/dhcpcd", "--nobackground", "-f", "/dhcpcd.conf", "-1"]
+
+  - name: format-docker-data
+    image: linuxkit/format:4f779c0b0d0ba145b7f03211b5cbf59fbbe12e54
+    command: ["/usr/bin/format", "-force", "-type", "ext4", "-label", "DATA", "/dev/vda"]
+
+  - name: mount
+    image: linuxkit/mount:bd1c3bb45e48e68e47a9456d1669f7119f855184
+    command: ["/usr/bin/mountie", "/var/lib/docker"]
+
+services:
+  - name: getty
+    image: linuxkit/getty:a86d74c8f89be8956330c3b115b0b1f2e09ef6e0
+    env:
+      - INSECURE=true
+
+  - name: docker
+    image: docker:27-dind
+    capabilities:
+      - all
+    net: host
+    mounts:
+      - type: cgroup
+        options: ["rw","nosuid","noexec","nodev","relatime"]
+    binds:
+      - /etc/resolv.conf:/etc/resolv.conf
+      - /var/lib/docker:/var/lib/docker
+      - /lib/modules:/lib/modules
+      - /etc/docker/daemon.json:/etc/docker/daemon.json
+      - /var/run:/var/run
+    command: ["/usr/local/bin/docker-init", "/usr/local/bin/dockerd"]
+
+  - name: workspace
+    image: "__CODESPACE_HOST_IMAGE__"
+    net: host
+    pid: host
+    capabilities:
+      - all
+    env:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - LOG_LEVEL=debug
+    binds:
+      - /dev:/dev
+      - /proc:/proc
+      - /var/run:/var/run
+      - /etc/codespace-version:/etc/codespace-version:ro
+      - /etc/resolv.conf:/etc/resolv.conf:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup
+    command:
+    - /bin/sh
+    - -c
+    - |
+      set -eux
+
+      echo "[workspace] booting at $(/bin/busybox date)"
+      echo "[workspace] kernel: $(/bin/busybox uname -a)"
+      if [ -f /etc/codespace-version ]; then
+        echo "[workspace] vm version: $(/bin/busybox cat /etc/codespace-version)"
+      else
+        echo "[workspace] vm version: unknown"
+      fi
+      if [ -f /opt/codespace-host/VERSION ]; then
+        echo "[workspace] codespace-host version: $(/bin/busybox cat /opt/codespace-host/VERSION)"
+      else
+        echo "[workspace] codespace-host version: unknown"
+      fi
+
+      /bin/busybox mkdir -p /workspaces /run/config
+
+      echo "[workspace] mounting virtiofs workspaces -> /workspaces"
+      mount -t virtiofs workspaces /workspaces
+
+      echo "[workspace] mounting virtiofs config -> /run/config"
+      mount -t virtiofs config /run/config
+
+      echo "[workspace] final mount table:"
+      mount | grep -E 'virtiofs|workspaces|config|/var/lib' || echo "[workspace] no virtiofs mounts?"
+
+      # Fix /dev/null perms
+      if [ -c /dev/null ]; then /bin/busybox chmod 666 /dev/null || true; fi
+
+      # Create dev user matching virtiofs 107:107, with writable home
+      mkdir -p /tmp/dev-home
+      addgroup -g 107 dev || true
+      adduser -D -u 107 -G dev -h /tmp/dev-home dev || true
+
+      echo "[workspace] waiting for docker"
+      /bin/busybox timeout 60 sh -c 'until /usr/local/bin/docker info >/dev/null 2>&1; do /bin/busybox sleep 1; done'
+
+      # Make docker.sock accessible to dev
+      if [ -S /var/run/docker.sock ]; then
+        /bin/busybox chown 107:107 /var/run/docker.sock || /bin/busybox chmod 666 /var/run/docker.sock || true
+      fi
+
+      echo "[workspace] codespace-host image: __CODESPACE_HOST_IMAGE__"
+      echo "[workspace] launching codespace-host as dev at $(/bin/busybox date)"
+      exec su dev -c "/opt/codespace-host/bin/codespace-host.sh"
+
+files:
+  - path: /var/lib/docker
+    directory: true
+  - path: /etc/codespace-version
+    contents: "__CODESPACE_VERSION__"
+  - path: /etc/docker/daemon.json
+    contents: |
+      {
+        "storage-driver": "overlay2",
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "10m",
+          "max-file": "3"
+        },
+        "max-concurrent-downloads": 8,
+        "max-concurrent-uploads": 4
+      }

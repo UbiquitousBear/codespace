@@ -15,10 +15,8 @@ source "${LIB_DIR}/config.sh"
 source "${LIB_DIR}/git.sh"
 source "${LIB_DIR}/devcontainer.sh"
 source "${LIB_DIR}/build.sh"
-source "${LIB_DIR}/features.sh"
 source "${LIB_DIR}/container.sh"
 source "${LIB_DIR}/hooks.sh"
-source "${LIB_DIR}/coder.sh"
 
 # Globals set by config/discovery
 REPO_URL=""
@@ -30,6 +28,11 @@ IMAGE_REF=""
 
 main() {
     log_info "codespace-host starting"
+    if [[ -n "${CODESPACE_HOST_VERSION:-}" ]]; then
+        log_info "codespace-host version: ${CODESPACE_HOST_VERSION}"
+    else
+        log_info "codespace-host version: unknown"
+    fi
 
     # 1. Read configuration from /run/config
     load_config
@@ -47,28 +50,24 @@ main() {
     IMAGE_REF=$(prepare_image "${WORKDIR}")
     log_info "image ready: ${IMAGE_REF}"
 
-    # 6. Apply features if specified
-    if has_features; then
-        IMAGE_REF=$(apply_features "${IMAGE_REF}")
-        log_info "features applied: ${IMAGE_REF}"
-    fi
-
-    # 7. Start the dev container
-    CONTAINER_NAME="dev-${REPO_NAME}"
+    # 6. Start the dev container
+    CONTAINER_NAME="devcontainer-${WORKSPACE_ID}"
     start_devcontainer "${IMAGE_REF}" "${CONTAINER_NAME}" "${WORKDIR}"
 
-    # 8. Fix workspace permissions inside the container
+    # 7. Fix workspace permissions inside the container
     fix_permissions_in_container "${CONTAINER_NAME}" "${WORKDIR}"
 
-    # 9. Run lifecycle hooks
+    # 8. Run lifecycle hooks
     run_lifecycle_hooks "${CONTAINER_NAME}"
 
-    # 10. Setup and start Coder agent inside container
-    setup_coder_agent "${CONTAINER_NAME}"
+    # 9. Start workspace services if entrypoint wasn't overridden
+    if [[ "${CONTAINER_NEEDS_INIT_EXEC}" == "true" ]]; then
+        start_workspace_init_exec "${CONTAINER_NAME}"
+    fi
 
     log_info "codespace-host ready"
 
-    # 11. Keep running and handle shutdown
+    # 9. Keep running and handle shutdown
     wait_for_shutdown "${CONTAINER_NAME}"
 }
 

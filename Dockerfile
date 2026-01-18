@@ -1,48 +1,44 @@
-FROM ubuntu:26.04
-
-ENV DEBIAN_FRONTEND=noninteractive
+FROM docker:27-cli
 
 # Install dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apk add --no-cache \
     bash \
     ca-certificates \
     curl \
     git \
-    gnupg \
     jq \
-    lsb-release \
     openssh-client \
     tar \
     gzip \
-    iproute2 \
-    iptables \
     nodejs \
-    npm \
-    && rm -rf /var/lib/apt/lists/*
+    npm
 
-# Install Docker Engine (for dind)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    docker.io \
-    && rm -rf /var/lib/apt/lists/*
 
-# Optional: Install oras for dev container features support
-# This enables pulling OCI artifacts for features
-ARG ORAS_VERSION=1.2.0
-RUN curl -fsSL "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz" \
-    | tar -xz -C /usr/local/bin oras
+# Devcontainer CLI for builds
+ARG DEVCONTAINER_CLI_VERSION=latest
+RUN npm install -g "@devcontainers/cli@${DEVCONTAINER_CLI_VERSION}" \
+    && npm cache clean --force
 
 # Copy codespace-host
 COPY bin/ /opt/codespace-host/bin/
+COPY init/ /opt/codespace-host/init/
 COPY lib/ /opt/codespace-host/lib/
 COPY defaults/ /opt/codespace-host/defaults/
 
 # Make scripts executable
 RUN chmod +x /opt/codespace-host/bin/* \
+    && chmod +x /opt/codespace-host/init/*.sh \
     && chmod +x /opt/codespace-host/lib/*.sh
+
+# Build metadata
+ARG CODESPACE_HOST_VERSION="dev"
+ENV CODESPACE_HOST_VERSION="${CODESPACE_HOST_VERSION}"
+RUN echo "${CODESPACE_HOST_VERSION}" > /opt/codespace-host/VERSION
 
 # Install Coder CLI using official install script
 # The script detects the platform and installs the appropriate binary
 ARG CODER_VERSION=2.28.6
+ENV CODER_VERSION="${CODER_VERSION}"
 
 RUN set -eux; \
   curl -fsSL "https://github.com/coder/coder/releases/download/v${CODER_VERSION}/coder_${CODER_VERSION}_linux_amd64.tar.gz" \
@@ -55,9 +51,6 @@ RUN set -eux; \
   chmod +x /usr/local/bin/coder; \
   rm -rf /tmp/coder.tar.gz /tmp/coder-extract
 
-RUN curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/usr/local && \
-    rm -rf /root/.cache
-
 # Working directory
 WORKDIR /workspaces
 
@@ -66,4 +59,4 @@ ENV PATH="/opt/codespace-host/bin:${PATH}"
 ENV LOG_LEVEL="info"
 
 # Entrypoint
-ENTRYPOINT ["/opt/codespace-host/bin/codespace-host-entrypoint"]
+ENTRYPOINT []

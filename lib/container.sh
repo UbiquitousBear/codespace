@@ -1,9 +1,10 @@
 #!/bin/bash
 # container.sh - Start and manage the dev container
 
-# Default UID/GID for devcontainer users (vscode, codespace, etc.)
-CONTAINER_USER_UID="${CONTAINER_USER_UID:-1000}"
-CONTAINER_USER_GID="${CONTAINER_USER_GID:-1000}"
+# Default UID/GID for devcontainer users (virtiofs mapped)
+CONTAINER_USER_UID="${CONTAINER_USER_UID:-107}"
+CONTAINER_USER_GID="${CONTAINER_USER_GID:-107}"
+CONTAINER_NEEDS_INIT_EXEC="false"
 
 fix_workspace_permissions() {
     local workspace="$1"
@@ -19,7 +20,7 @@ fix_permissions_in_container() {
     log_info "fixing workspace permissions inside container"
 
     # Run chown inside the container where we have permission
-    if ! docker exec "${container}" chown -R "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "${workspace}" 2>/dev/null; then
+    if ! docker exec -u 0 "${container}" chown -R "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "${workspace}" 2>/dev/null; then
         log_warn "could not fix workspace permissions - user may have issues"
     fi
 }
@@ -46,6 +47,8 @@ start_devcontainer() {
 
     log_info "starting dev container: ${name} with image: ${image}"
 
+    CONTAINER_NEEDS_INIT_EXEC="false"
+
     # Remove existing container if present
     if docker ps -a --format '{{.Names}}' | grep -q "^${name}\$"; then
         log_info "removing existing container"
@@ -59,8 +62,9 @@ start_devcontainer() {
     )
 
     # Init process (recommended for proper signal handling)
+    local use_init="false"
     if [[ "${DC_INIT}" == "true" ]]; then
-        run_args+=(--init)
+        use_init="true"
     fi
 
     # Network mode - host for simplicity with Coder
@@ -76,6 +80,9 @@ start_devcontainer() {
 
     # Config mount (for tokens)
     run_args+=(-v "/run/config:/run/config:ro")
+
+    # Init script mount (workspace-init)
+    run_args+=(-v "/opt/codespace-host/init:/opt/codespace-init:ro")
 
     # Additional mounts from devcontainer.json
     add_configured_mounts run_args
@@ -94,8 +101,15 @@ start_devcontainer() {
     fi
 
     # Image and command
+    run_args+=(--user "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}")
+    if image_has_entrypoint_or_cmd "${image}"; then
+        log_info "image has entrypoint/cmd; using image defaults and starting workspace init via exec"
+        CONTAINER_NEEDS_INIT_EXEC="true"
+    else
+        log_info "image has no entrypoint/cmd (or only a shell); using workspace-init as entrypoint"
+        run_args+=(--entrypoint "/opt/codespace-init/workspace-init.sh")
+    fi
     run_args+=("${image}")
-    run_args+=(sleep infinity)
 
     log_info "devcontainer image raw: '$(printf '%q' "$image")'"
     log_debug "run_args as array:"
@@ -105,9 +119,55 @@ start_devcontainer() {
 
     log_debug "docker run ${run_args[*]}"
 
-    if ! docker run "${run_args[@]}" >/dev/null; then
-        log_error "failed to start container"
-        exit 1
+    local run_output=""
+    local run_status=0
+    if [[ "${use_init}" == "true" ]]; then
+        local errexit_set=0
+        case $- in
+            *e*) errexit_set=1 ;;
+        esac
+        if ((errexit_set)); then
+            set +e
+        fi
+        run_output=$(docker run --init "${run_args[@]}" 2>&1)
+        run_status=$?
+        if ((errexit_set)); then
+            set -e
+        fi
+        if [[ -z "${run_output}" ]]; then
+            run_output="(no output)"
+        fi
+
+        if ((run_status != 0)); then
+            if echo "${run_output}" | grep -qi "docker-init"; then
+                log_warn "docker-init not available on daemon; retrying without --init"
+                docker rm -f "${name}" >/dev/null 2>&1 || true
+                use_init="false"
+            else
+                log_error "failed to start container"
+                log_error "${run_output}"
+                exit 1
+            fi
+        else
+            if docker ps -a --format '{{.Names}}' | grep -q "^${name}\$"; then
+                local state_status=""
+                local state_error=""
+                state_status="$(docker inspect -f '{{.State.Status}}' "${name}" 2>/dev/null || true)"
+                state_error="$(docker inspect -f '{{.State.Error}}' "${name}" 2>/dev/null || true)"
+                if [[ "${state_status}" == "created" ]] && echo "${state_error}" | grep -qi "docker-init"; then
+                    log_warn "docker-init not available on daemon; retrying without --init"
+                    docker rm -f "${name}" >/dev/null 2>&1 || true
+                    use_init="false"
+                fi
+            fi
+        fi
+    fi
+
+    if [[ "${use_init}" == "false" ]]; then
+        if ! docker run "${run_args[@]}" >/dev/null 2>&1; then
+            log_error "failed to start container"
+            exit 1
+        fi
     fi
 
     # Wait for container to be running
@@ -183,6 +243,52 @@ expand_mount_path() {
     echo "${path}"
 }
 
+image_has_entrypoint_or_cmd() {
+    local image="$1"
+    local entrypoint="null"
+    local cmd="null"
+
+    if ! docker image inspect "${image}" >/dev/null 2>&1; then
+        return 1
+    fi
+
+    entrypoint="$(docker image inspect -f '{{json .Config.Entrypoint}}' "${image}" 2>/dev/null || echo "null")"
+    cmd="$(docker image inspect -f '{{json .Config.Cmd}}' "${image}" 2>/dev/null || echo "null")"
+
+    if [[ "${entrypoint}" != "null" && "${entrypoint}" != "[]" ]]; then
+        return 0
+    fi
+    if [[ "${cmd}" != "null" && "${cmd}" != "[]" ]]; then
+        case "${cmd}" in
+            "[\"/bin/bash\"]"|"[\"/bin/sh\"]"|"[\"bash\"]"|"[\"sh\"]")
+                return 1
+                ;;
+            *)
+                return 0
+                ;;
+        esac
+    fi
+    return 1
+}
+
+start_workspace_init_exec() {
+    local container="$1"
+
+    log_info "starting workspace services inside container"
+    if ! docker exec -d -u "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" \
+        "${container}" /bin/sh -c "/opt/codespace-init/workspace-init.sh >>/tmp/workspace-init.log 2>&1" >/dev/null 2>&1; then
+        log_warn "failed to start workspace init via exec"
+        return
+    fi
+
+    sleep 2
+    if docker exec "${container}" /bin/sh -c 'ps aux 2>/dev/null | grep -v grep | grep -q "coder agent"' >/dev/null 2>&1; then
+        log_info "coder agent is running"
+    else
+        log_warn "coder agent not detected yet; check /tmp/workspace-init.log in the devcontainer"
+    fi
+}
+
 add_environment_vars() {
     local -n args=$1
 
@@ -196,8 +302,26 @@ add_environment_vars() {
         args+=(-e "GITHUB_TOKEN=${GITHUB_TOKEN}")
         args+=(-e "GH_ENTERPRISE_TOKEN=${GITHUB_TOKEN}")
     fi
+    if [[ -n "${CODER_AGENT_TOKEN:-}" ]]; then
+        args+=(-e "CODER_AGENT_TOKEN=${CODER_AGENT_TOKEN}")
+    fi
     if [[ -n "${CODER_AGENT_URL:-}" ]]; then
         args+=(-e "CODER_AGENT_URL=${CODER_AGENT_URL}")
+    fi
+
+    # VS Code server port (support both names)
+    if [[ -n "${CODER_VSCODE_PORT:-}" ]]; then
+        args+=(-e "CODER_VSCODE_PORT=${CODER_VSCODE_PORT}")
+        args+=(-e "CODE_SERVER_PORT=${CODER_VSCODE_PORT}")
+    fi
+
+    # Workspace metadata
+    if [[ -n "${WORKSPACE_ID:-}" ]]; then
+        args+=(-e "WORKSPACE_ID=${WORKSPACE_ID}")
+    fi
+
+    if [[ -n "${CODER_VERSION:-}" ]]; then
+        args+=(-e "CODER_VERSION=${CODER_VERSION}")
     fi
 
     # Remote user for scripts

@@ -5,16 +5,31 @@ prepare_image() {
     local workspace="$1"
     local image_ref=""
 
-    if [[ -n "${DC_IMAGE}" ]]; then
-        # Direct image reference
+    if [[ -n "${DC_CONFIG_FILE}" ]]; then
+        image_ref="devcontainer-${WORKSPACE_ID}:latest"
+        if command -v devcontainer >/dev/null 2>&1; then
+            image_ref=$(build_with_devcontainer_cli "${image_ref}")
+        else
+            log_warn "devcontainer CLI not found; falling back to docker build/pull"
+            if [[ -n "${DC_DOCKERFILE}" ]]; then
+                image_ref=$(build_image "${image_ref}")
+            elif [[ -n "${DC_IMAGE}" ]]; then
+                image_ref="${DC_IMAGE}"
+                pull_image "${image_ref}"
+            else
+                log_warn "no image or Dockerfile specified, using universal"
+                image_ref="mcr.microsoft.com/devcontainers/base:ubuntu"
+                pull_image "${image_ref}"
+            fi
+        fi
+    elif [[ -n "${DC_IMAGE}" ]]; then
+        # Direct image reference (no devcontainer config)
         image_ref="${DC_IMAGE}"
         pull_image "${image_ref}"
-
     elif [[ -n "${DC_DOCKERFILE}" ]]; then
-        # Build from Dockerfile
-        image_ref="devcontainer-${REPO_NAME}:latest"
-        build_image "${image_ref}"
-
+        # Build from Dockerfile (no devcontainer config)
+        image_ref="devcontainer-${WORKSPACE_ID}:latest"
+        image_ref=$(build_image "${image_ref}")
     else
         # Fallback to universal
         log_warn "no image or Dockerfile specified, using universal"
@@ -89,6 +104,27 @@ build_image() {
     fi
 
     # Only the final tag on stdout
+    echo "${tag}"
+}
+
+build_with_devcontainer_cli() {
+    local tag="$1"
+
+    log_info "building image with devcontainer CLI: ${tag}"
+
+    local cmd=(devcontainer build --workspace-folder "${WORKDIR}" --image-name "${tag}")
+    if [[ -n "${DC_CONFIG_FILE}" ]]; then
+        cmd+=(--config "${DC_CONFIG_FILE}")
+    fi
+
+    # Send all devcontainer output to stderr
+    if ! "${cmd[@]}" >&2; then
+        log_error "devcontainer build failed"
+        log_warn "falling back to universal image"
+        echo "mcr.microsoft.com/devcontainers/base:ubuntu"
+        return 0
+    fi
+
     echo "${tag}"
 }
 

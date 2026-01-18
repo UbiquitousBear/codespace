@@ -8,6 +8,9 @@ export REPO_URL=""
 export BRANCH=""
 export GIT_NAME=""
 export GIT_EMAIL=""
+export WORKSPACE_ID=""
+export GIT_USERNAME=""
+export GIT_TOKEN=""
 export CODER_AGENT_TOKEN=""
 export CODER_AGENT_URL=""
 export GITHUB_TOKEN=""
@@ -41,6 +44,8 @@ load_config() {
     GIT_EMAIL="$(read_config_file "git-email" "coder@example.com")"
 
     # Tokens
+    GIT_USERNAME="$(read_config_file "git-username" "")"
+    GIT_TOKEN="$(read_config_file "git-token" "")"
     CODER_AGENT_TOKEN="$(read_config_file "coder-token")"
     CODER_AGENT_URL="$(read_config_file "coder-url")"
     GITHUB_TOKEN="$(read_config_file "github-token")"
@@ -50,13 +55,18 @@ load_config() {
     REPO_NAME="${REPO_URL%.git}"
     REPO_NAME="${REPO_NAME##*/}"
     WORKDIR="/workspaces/${REPO_NAME}"
+    WORKSPACE_ID="$(read_config_file "workspace-id" "")"
+    if [[ -z "${WORKSPACE_ID}" ]]; then
+        WORKSPACE_ID="${REPO_NAME}"
+    fi
 
     # Export for child processes
-    export REPO_URL BRANCH GIT_NAME GIT_EMAIL
+    export REPO_URL BRANCH GIT_NAME GIT_EMAIL GIT_USERNAME GIT_TOKEN
     export CODER_AGENT_TOKEN CODER_AGENT_URL GITHUB_TOKEN GH_ENTERPRISE_TOKEN
-    export REPO_NAME WORKDIR
+    export REPO_NAME WORKDIR WORKSPACE_ID
 
     log_info "repo: ${REPO_URL}"
     log_info "branch: ${BRANCH}"
     log_info "workdir: ${WORKDIR}"
+    log_info "workspace id: ${WORKSPACE_ID}"
 }
