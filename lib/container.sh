@@ -105,14 +105,19 @@ start_devcontainer() {
 
     # Provide docker CLI inside the devcontainer when using dind
     if [[ -n "${DOCKER_HOST:-}" ]]; then
-        local docker_stage="/var/run/codespace/docker"
+        local docker_stage_dir="${docker_mount_root}/.codespace-bin"
+        local docker_stage="${docker_stage_dir}/docker"
         if [[ -x "/usr/local/bin/docker" ]]; then
-            mkdir -p "$(dirname "${docker_stage}")" 2>/dev/null || true
-            if cp "/usr/local/bin/docker" "${docker_stage}" 2>/dev/null; then
-                chmod 755 "${docker_stage}" 2>/dev/null || true
-                run_args+=(-v "${docker_stage}:/usr/local/bin/docker:ro")
+            if mkdir -p "${docker_stage_dir}" 2>/dev/null; then
+                chmod 777 "${docker_stage_dir}" 2>/dev/null || true
+                if cp "/usr/local/bin/docker" "${docker_stage}" 2>/dev/null; then
+                    chmod 755 "${docker_stage}" 2>/dev/null || true
+                    run_args+=(-v "${docker_stage}:/usr/local/bin/docker:ro")
+                else
+                    log_warn "failed to stage docker CLI at ${docker_stage}"
+                fi
             else
-                log_warn "failed to stage docker CLI at ${docker_stage}"
+                log_warn "failed to create docker CLI staging dir at ${docker_stage_dir}"
             fi
         else
             log_warn "docker CLI not found at /usr/local/bin/docker; skipping mount"
@@ -454,6 +459,62 @@ add_environment_vars() {
         args+=(-e "CODER_VERSION=${CODER_VERSION}")
     fi
 
+    # code-server module env passthrough (aligns with coder/registry)
+    if [[ -n "${PORT:-}" ]]; then
+        args+=(-e "PORT=${PORT}")
+    fi
+    if [[ -n "${APP_NAME:-}" ]]; then
+        args+=(-e "APP_NAME=${APP_NAME}")
+    fi
+    if [[ -n "${LOG_PATH:-}" ]]; then
+        args+=(-e "LOG_PATH=${LOG_PATH}")
+    fi
+    if [[ -n "${INSTALL_PREFIX:-}" ]]; then
+        args+=(-e "INSTALL_PREFIX=${INSTALL_PREFIX}")
+    fi
+    if [[ -n "${VERSION:-}" ]]; then
+        args+=(-e "VERSION=${VERSION}")
+    fi
+    if [[ -n "${EXTENSIONS:-}" ]]; then
+        args+=(-e "EXTENSIONS=${EXTENSIONS}")
+    fi
+    if [[ -n "${EXTENSIONS_DIR:-}" ]]; then
+        args+=(-e "EXTENSIONS_DIR=${EXTENSIONS_DIR}")
+    fi
+    if [[ -n "${SETTINGS:-}" ]]; then
+        args+=(-e "SETTINGS=${SETTINGS}")
+    fi
+    if [[ -n "${MACHINE_SETTINGS:-}" ]]; then
+        args+=(-e "MACHINE_SETTINGS=${MACHINE_SETTINGS}")
+    fi
+    if [[ -n "${FOLDER:-}" ]]; then
+        args+=(-e "FOLDER=${FOLDER}")
+    fi
+    if [[ -n "${OFFLINE:-}" ]]; then
+        args+=(-e "OFFLINE=${OFFLINE}")
+    fi
+    if [[ -n "${USE_CACHED:-}" ]]; then
+        args+=(-e "USE_CACHED=${USE_CACHED}")
+    fi
+    if [[ -n "${USE_CACHED_EXTENSIONS:-}" ]]; then
+        args+=(-e "USE_CACHED_EXTENSIONS=${USE_CACHED_EXTENSIONS}")
+    fi
+    if [[ -n "${AUTO_INSTALL_EXTENSIONS:-}" ]]; then
+        args+=(-e "AUTO_INSTALL_EXTENSIONS=${AUTO_INSTALL_EXTENSIONS}")
+    fi
+    if [[ -n "${ADDITIONAL_ARGS:-}" ]]; then
+        args+=(-e "ADDITIONAL_ARGS=${ADDITIONAL_ARGS}")
+    fi
+    if [[ -n "${CODER_SCRIPT_BIN_DIR:-}" ]]; then
+        args+=(-e "CODER_SCRIPT_BIN_DIR=${CODER_SCRIPT_BIN_DIR}")
+    fi
+    if [[ -n "${CODE_SERVER_LOG:-}" ]]; then
+        args+=(-e "CODE_SERVER_LOG=${CODE_SERVER_LOG}")
+    fi
+    if [[ -n "${CODE_SERVER_BIND_ADDR:-}" ]]; then
+        args+=(-e "CODE_SERVER_BIND_ADDR=${CODE_SERVER_BIND_ADDR}")
+    fi
+
     # Remote user for scripts
     if [[ -n "${DC_REMOTE_USER}" ]]; then
         args+=(-e "REMOTE_USER=${DC_REMOTE_USER}")
@@ -463,7 +524,8 @@ add_environment_vars() {
     args+=(-e "USER=${user_env}")
     args+=(-e "LOGNAME=${user_env}")
     args+=(-e "USERNAME=${user_env}")
-    args+=(-e "PATH=${PATH}")
+    args+=(-e "SHELL=/bin/bash")
+    args+=(-e "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH}")
 
     # Container env from devcontainer.json
     if [[ "${DC_CONTAINER_ENV}" != "{}" ]]; then

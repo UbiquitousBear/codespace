@@ -45,6 +45,27 @@ if [ ! -w "${HOME}" ]; then
     mkdir -p "${HOME}" 2>/dev/null || true
 fi
 export HOME
+REMOTE_USER="${REMOTE_USER:-${USER:-codespace}}"
+export USER="${REMOTE_USER}"
+export LOGNAME="${REMOTE_USER}"
+export USERNAME="${REMOTE_USER}"
+if [ -z "${SHELL:-}" ]; then
+    if [ -x "/bin/bash" ]; then
+        SHELL="/bin/bash"
+    else
+        SHELL="/bin/sh"
+    fi
+fi
+export SHELL
+
+DEFAULT_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+if [ -z "${PATH:-}" ]; then
+    PATH="${DEFAULT_PATH}"
+fi
+case ":${PATH}:" in
+    *:/usr/local/bin:*) ;;
+    *) PATH="${DEFAULT_PATH}:${PATH}" ;;
+esac
 export PATH="${HOME}/.local/bin:${PATH}"
 
 if [ -z "${CODER_AGENT_TOKEN:-}" ] && [ -f /run/config/coder-token ]; then
@@ -72,7 +93,38 @@ CODE_SERVER_PORT="${CODE_SERVER_PORT:-${CODER_VSCODE_PORT:-13337}}"
 export CODE_SERVER_PORT
 export CODER_VSCODE_PORT="${CODER_VSCODE_PORT:-${CODE_SERVER_PORT}}"
 
+if [ -z "${CODE_SERVER_BIND_ADDR:-}" ]; then
+    if [ -f /proc/net/if_inet6 ]; then
+        CODE_SERVER_BIND_ADDR="[::]:${CODE_SERVER_PORT}"
+    else
+        CODE_SERVER_BIND_ADDR="127.0.0.1:${CODE_SERVER_PORT}"
+    fi
+fi
+export CODE_SERVER_BIND_ADDR
+
 CODE_SERVER_LOG="${CODE_SERVER_LOG:-/dev/stdout}"
+LOG_PATH="${LOG_PATH:-${CODE_SERVER_LOG}}"
+PORT="${PORT:-${CODE_SERVER_PORT}}"
+INSTALL_PREFIX="${INSTALL_PREFIX:-}"
+if [ -z "${INSTALL_PREFIX}" ]; then
+    if [ -w "/usr/local" ]; then
+        INSTALL_PREFIX="/usr/local"
+    else
+        INSTALL_PREFIX="${HOME}/.local"
+    fi
+fi
+APP_NAME="${APP_NAME:-code-server}"
+ADDITIONAL_ARGS="${ADDITIONAL_ARGS:-}"
+EXTENSIONS_DIR="${EXTENSIONS_DIR:-}"
+EXTENSIONS="${EXTENSIONS:-}"
+USE_CACHED="${USE_CACHED:-false}"
+USE_CACHED_EXTENSIONS="${USE_CACHED_EXTENSIONS:-false}"
+AUTO_INSTALL_EXTENSIONS="${AUTO_INSTALL_EXTENSIONS:-false}"
+OFFLINE="${OFFLINE:-false}"
+VERSION="${VERSION:-}"
+CODER_SCRIPT_BIN_DIR="${CODER_SCRIPT_BIN_DIR:-}"
+SETTINGS="${SETTINGS:-}"
+MACHINE_SETTINGS="${MACHINE_SETTINGS:-}"
 
 pick_install_dir() {
     if [ -d "/usr/local/bin" ] && [ -w "/usr/local/bin" ]; then
@@ -86,6 +138,35 @@ pick_install_dir() {
     fi
     mkdir -p "/tmp/.local/bin" 2>/dev/null || true
     echo "/tmp/.local/bin"
+}
+
+extension_arg() {
+    if [ -n "${EXTENSIONS_DIR}" ]; then
+        mkdir -p "${EXTENSIONS_DIR}" 2>/dev/null || true
+        echo "--extensions-dir=${EXTENSIONS_DIR}"
+        return 0
+    fi
+    echo ""
+}
+
+ensure_code_server_settings() {
+    if [ ! -f "${HOME}/.local/share/code-server/User/settings.json" ]; then
+        log "Creating code-server settings file..."
+        mkdir -p "${HOME}/.local/share/code-server/User" 2>/dev/null || true
+        if command -v jq >/dev/null 2>&1; then
+            echo "${SETTINGS}" | jq '.' > "${HOME}/.local/share/code-server/User/settings.json"
+        else
+            echo "${SETTINGS}" > "${HOME}/.local/share/code-server/User/settings.json"
+        fi
+    fi
+
+    log "Creating code-server machine settings file..."
+    mkdir -p "${HOME}/.local/share/code-server/Machine" 2>/dev/null || true
+    if command -v jq >/dev/null 2>&1; then
+        echo "${MACHINE_SETTINGS}" | jq '.' > "${HOME}/.local/share/code-server/Machine/settings.json"
+    else
+        echo "${MACHINE_SETTINGS}" > "${HOME}/.local/share/code-server/Machine/settings.json"
+    fi
 }
 
 ensure_coder() {
@@ -140,12 +221,55 @@ ensure_coder() {
 }
 
 ensure_code_server() {
-    if [ -n "${CODER_VSCODE_BIN:-}" ]; then
-        if [ -x "${CODER_VSCODE_BIN}" ]; then
-            echo "${CODER_VSCODE_BIN}"
+    CODE_SERVER_PATH="${INSTALL_PREFIX}/bin/code-server"
+
+    if ! command -v curl >/dev/null 2>&1; then
+        log_stderr "WARN: curl is required to install code-server."
+        return 1
+    fi
+
+    if [ "${OFFLINE}" = "true" ]; then
+        if [ -x "${CODE_SERVER_PATH}" ]; then
+            echo "${CODE_SERVER_PATH}"
             return 0
         fi
-        log_stderr "WARN: CODER_VSCODE_BIN is not executable: ${CODER_VSCODE_BIN}"
+        log_stderr "ERROR: offline mode enabled but code-server not found at ${CODE_SERVER_PATH}"
+        return 1
+    fi
+
+    if [ ! -x "${CODE_SERVER_PATH}" ] || [ "${USE_CACHED}" != "true" ]; then
+        mkdir -p "${INSTALL_PREFIX}" 2>/dev/null || true
+        if [ -n "${CODER_SCRIPT_BIN_DIR}" ] && [ -e "${CODER_SCRIPT_BIN_DIR}/code-server" ]; then
+            rm -f "${CODER_SCRIPT_BIN_DIR}/code-server"
+        fi
+
+        if command -v bash >/dev/null 2>&1; then
+            log_stderr "Installing code-server into ${INSTALL_PREFIX}"
+            INSTALL_ARGS="--method=standalone --prefix=${INSTALL_PREFIX}"
+            if [ -n "${VERSION}" ]; then
+                INSTALL_ARGS="${INSTALL_ARGS} --version=${VERSION}"
+            fi
+            if ! curl -fsSL https://code-server.dev/install.sh | bash -s -- ${INSTALL_ARGS}; then
+                log_stderr "WARN: failed to install code-server"
+                return 1
+            fi
+        else
+            log_stderr "WARN: bash is required to install code-server."
+            return 1
+        fi
+    fi
+
+    if [ -x "${CODE_SERVER_PATH}" ]; then
+        if [ -n "${CODER_SCRIPT_BIN_DIR}" ] && [ ! -e "${CODER_SCRIPT_BIN_DIR}/code-server" ]; then
+            ln -s "${CODE_SERVER_PATH}" "${CODER_SCRIPT_BIN_DIR}/code-server" 2>/dev/null || true
+        fi
+        echo "${CODE_SERVER_PATH}"
+        return 0
+    fi
+
+    if [ -n "${CODER_VSCODE_BIN:-}" ] && [ -x "${CODER_VSCODE_BIN}" ]; then
+        echo "${CODER_VSCODE_BIN}"
+        return 0
     fi
 
     if command -v code-server >/dev/null 2>&1; then
@@ -153,55 +277,101 @@ ensure_code_server() {
         return 0
     fi
 
-    if ! command -v curl >/dev/null 2>&1; then
-        log_stderr "WARN: curl is required to install code-server."
-        return 1
-    fi
-
-    install_prefix="/usr/local"
-    if [ ! -w "/usr/local" ]; then
-        install_prefix="${HOME}/.local"
-    fi
-    mkdir -p "${install_prefix}" 2>/dev/null || true
-
-    if command -v bash >/dev/null 2>&1; then
-        log_stderr "Installing code-server into ${install_prefix}"
-        if ! curl -fsSL https://code-server.dev/install.sh | bash -s -- --method=standalone --prefix="${install_prefix}"; then
-            log_stderr "WARN: failed to install code-server"
-            return 1
-        fi
-    else
-        log_stderr "WARN: bash is required to install code-server."
-        return 1
-    fi
-
-    if [ -x "${install_prefix}/bin/code-server" ]; then
-        echo "${install_prefix}/bin/code-server"
-        return 0
-    fi
-
     return 1
+}
+
+code_server_extension_installed() {
+    _extension="$1"
+    if [ "${USE_CACHED_EXTENSIONS}" != "true" ]; then
+        return 1
+    fi
+    printf "%s\n" "${INSTALLED_EXTENSIONS}" | grep -qx "${_extension}"
+}
+
+install_code_server_extensions() {
+    EXT_ARG="$(extension_arg)"
+    INSTALLED_EXTENSIONS="$("${CODE_SERVER_BIN}" --list-extensions ${EXT_ARG} 2>/dev/null || true)"
+
+    IFS=','; set -- ${EXTENSIONS}; unset IFS
+    for extension in "$@"; do
+        if [ -z "${extension}" ]; then
+            continue
+        fi
+        if code_server_extension_installed "${extension}"; then
+            log "Extension already installed: ${extension}"
+            continue
+        fi
+        log "Installing extension ${extension}..."
+        if ! "${CODE_SERVER_BIN}" ${EXT_ARG} --force --install-extension "${extension}" >/dev/null 2>&1; then
+            log_stderr "WARN: failed to install extension: ${extension}"
+        fi
+    done
+
+    if [ "${AUTO_INSTALL_EXTENSIONS}" = "true" ]; then
+        if ! command -v jq >/dev/null 2>&1; then
+            log "jq is required to install extensions from a workspace file."
+            return 0
+        fi
+
+        WORKSPACE_DIR="${HOME}"
+        if [ -n "${FOLDER:-}" ]; then
+            WORKSPACE_DIR="${FOLDER}"
+        fi
+        if [ -f "${WORKSPACE_DIR}/.vscode/extensions.json" ]; then
+            log "Installing extensions from ${WORKSPACE_DIR}/.vscode/extensions.json..."
+            extensions="$(sed 's|//.*||g' "${WORKSPACE_DIR}/.vscode/extensions.json" | jq -r '.recommendations[]' 2>/dev/null || true)"
+            for extension in ${extensions}; do
+                if code_server_extension_installed "${extension}"; then
+                    continue
+                fi
+                "${CODE_SERVER_BIN}" ${EXT_ARG} --force --install-extension "${extension}" >/dev/null 2>&1 || true
+            done
+        fi
+    fi
 }
 
 start_code_server_bg() {
     (
-        CODE_SERVER_BIN="$(ensure_code_server || true)"
-        if [ -n "${CODE_SERVER_BIN}" ]; then
-            if process_running "code-server.*${CODE_SERVER_PORT}"; then
-                log "code-server already running on port ${CODE_SERVER_PORT}"
-                exit 0
-            fi
-            log "Starting code-server on port ${CODE_SERVER_PORT}..."
-            "${CODE_SERVER_BIN}" \
-                --bind-addr "127.0.0.1:${CODE_SERVER_PORT}" \
-                --auth none \
-                --disable-telemetry \
-                --disable-update-check \
-                >>"${CODE_SERVER_LOG}" 2>&1 &
-        else
-            log_stderr "WARN: code-server not found; ensure it is installed in the devcontainer image."
+        log "Ensuring code-server is installed..."
+        if ! CODE_SERVER_BIN="$(ensure_code_server)"; then
+            log_stderr "WARN: code-server install failed; not starting."
+            exit 0
         fi
-    ) >>"${CODE_SERVER_LOG}" 2>&1 &
+        ensure_code_server_settings
+        install_code_server_extensions
+        if [ -z "${CODE_SERVER_BIN}" ] || [ ! -x "${CODE_SERVER_BIN}" ]; then
+            log_stderr "WARN: code-server not found; ensure it is installed in the devcontainer image."
+            exit 0
+        fi
+        if process_running "code-server.*${CODE_SERVER_PORT}"; then
+            log "code-server already running on port ${CODE_SERVER_PORT}"
+            exit 0
+        fi
+        log "Starting code-server on ${CODE_SERVER_BIND_ADDR}..."
+        if [ -n "${CODE_SERVER_BIND_ADDR}" ]; then
+            "${CODE_SERVER_BIN}" \
+                $(extension_arg) \
+                --auth none \
+                --bind-addr "${CODE_SERVER_BIND_ADDR}" \
+                --app-name "${APP_NAME}" \
+                ${ADDITIONAL_ARGS} \
+                >>"${LOG_PATH}" 2>&1 &
+        else
+            "${CODE_SERVER_BIN}" \
+                $(extension_arg) \
+                --auth none \
+                --port "${PORT}" \
+                --app-name "${APP_NAME}" \
+                ${ADDITIONAL_ARGS} \
+                >>"${LOG_PATH}" 2>&1 &
+        fi
+        sleep 1
+        if process_running "code-server.*${CODE_SERVER_PORT}"; then
+            log "code-server started"
+        else
+            log_stderr "WARN: code-server failed to start; check logs."
+        fi
+    ) >>"${LOG_PATH}" 2>&1 &
 }
 
 if process_running "coder agent"; then
