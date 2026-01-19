@@ -112,7 +112,9 @@ LOG_PATH="${LOG_PATH:-${CODE_SERVER_LOG}}"
 PORT="${PORT:-${CODE_SERVER_PORT}}"
 INSTALL_PREFIX="${INSTALL_PREFIX:-}"
 if [ -z "${INSTALL_PREFIX}" ]; then
-    if [ -w "/usr/local" ]; then
+    if [ -d "/vscode" ] && [ -w "/vscode" ]; then
+        INSTALL_PREFIX="/vscode"
+    elif [ -w "/usr/local" ]; then
         INSTALL_PREFIX="/usr/local"
     else
         INSTALL_PREFIX="${HOME}/.local"
@@ -254,7 +256,7 @@ ensure_code_server() {
             if [ -n "${VERSION}" ]; then
                 INSTALL_ARGS="${INSTALL_ARGS} --version=${VERSION}"
             fi
-            if ! curl -fsSL https://code-server.dev/install.sh | bash -s -- ${INSTALL_ARGS}; then
+            if ! curl -fsSL https://code-server.dev/install.sh | bash -s -- ${INSTALL_ARGS} >&2; then
                 log_stderr "WARN: failed to install code-server"
                 return 1
             fi
