@@ -54,6 +54,8 @@ services:
     - -c
     - |
       set -eux
+      mkdir -p /sys/fs/cgroup
+      mount -t cgroup2 none /sys/fs/cgroup || true
       mkdir -p /var/workspaces /var/config
       mount -t virtiofs workspaces /var/workspaces
       mount -t virtiofs config /var/config
