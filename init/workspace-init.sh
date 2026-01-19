@@ -74,6 +74,23 @@ case ":${PATH}:" in
 esac
 export PATH="${HOME}/.local/bin:${PATH}"
 
+check_cgroup_memcg() {
+    if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
+        if grep -qw memory /sys/fs/cgroup/cgroup.controllers; then
+            log "cgroup v2 memory controller detected"
+        else
+            log_stderr "WARN: cgroup v2 memory controller missing"
+        fi
+    else
+        log_stderr "WARN: cgroup v2 not detected (missing /sys/fs/cgroup/cgroup.controllers)"
+    fi
+    if [ ! -f /sys/fs/cgroup/memory.current ]; then
+        log_stderr "WARN: /sys/fs/cgroup/memory.current missing"
+    fi
+}
+
+check_cgroup_memcg
+
 if [ -z "${CODER_AGENT_TOKEN:-}" ] && [ -f /run/config/coder-token ]; then
     CODER_AGENT_TOKEN="$(cat /run/config/coder-token)"
 fi

@@ -136,6 +136,12 @@ start_devcontainer() {
         log_warn "failed to create VS Code data dir at ${vscode_remote_dir}"
     fi
 
+    # Provide staged binaries via /run/config/.codespace-bin for PATH fallback.
+    local staged_bin_dir="${config_mount_source}/.codespace-bin"
+    if [[ -d "${staged_bin_dir}" ]]; then
+        run_args+=(-v "${staged_bin_dir}:/run/config/.codespace-bin:ro")
+    fi
+
     # Stage workspace init on the shared workspace mount for dind, then mount it in.
     if [[ -n "${DOCKER_HOST:-}" ]]; then
         local stage_dir="${config_mount_source}/.codespace-init"
@@ -534,7 +540,7 @@ add_environment_vars() {
     args+=(-e "LOGNAME=${user_env}")
     args+=(-e "USERNAME=${user_env}")
     args+=(-e "SHELL=/bin/bash")
-    args+=(-e "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH}")
+    args+=(-e "PATH=/run/config/.codespace-bin:/vscode/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH}")
 
     # Container env from devcontainer.json
     if [[ "${DC_CONTAINER_ENV}" != "{}" ]]; then
