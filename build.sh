@@ -8,7 +8,7 @@ CODESPACE_VERSION="$(date -u +%Y%m%d%H%M%SZ)"
 BUILD_YAML="/tmp/codespace-vm.${CODESPACE_VERSION}.yaml"
 
 trap 'rm -f "${BUILD_YAML}"' EXIT
-
+git pull
 # 1) Build and push codespace-host (amd64)
 docker buildx build --platform linux/amd64 -t "${HOST_IMAGE}" \
   --build-arg CODESPACE_HOST_VERSION="${CODESPACE_VERSION}" \

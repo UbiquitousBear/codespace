@@ -32,11 +32,17 @@ if [ -f "${LOCK_FILE}" ]; then
 fi
 
 USER_NAME="$(id -un 2>/dev/null || echo "")"
-if [ -z "${HOME:-}" ] || [ ! -d "${HOME}" ] || [ "${HOME}" = "/" ]; then
+home_invalid=0
+case "${HOME:-}" in
+    ""|"/"|"/workspaces"|"/workspaces/"*)
+        home_invalid=1
+        ;;
+esac
+if [ "${home_invalid}" -eq 1 ] || [ ! -d "${HOME}" ]; then
     if [ -n "${USER_NAME}" ] && [ -d "/home/${USER_NAME}" ]; then
         HOME="/home/${USER_NAME}"
     else
-        HOME="/workspaces/.home"
+        HOME="/tmp/codespace-home"
     fi
 fi
 mkdir -p "${HOME}" 2>/dev/null || true

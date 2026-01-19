@@ -105,7 +105,7 @@ start_devcontainer() {
 
     # Provide docker CLI inside the devcontainer when using dind
     if [[ -n "${DOCKER_HOST:-}" ]]; then
-        local docker_stage_dir="${docker_mount_root}/.codespace-bin"
+        local docker_stage_dir="${config_mount_source}/.codespace-bin"
         local docker_stage="${docker_stage_dir}/docker"
         if [[ -x "/usr/local/bin/docker" ]]; then
             if mkdir -p "${docker_stage_dir}" 2>/dev/null; then
@@ -127,9 +127,18 @@ start_devcontainer() {
     # Config mount (for tokens)
     run_args+=(-v "${config_mount_source}:/run/config:ro")
 
+    # Persist VS Code server data off /workspaces.
+    local vscode_remote_dir="${config_mount_source}/.vscode-remote"
+    if mkdir -p "${vscode_remote_dir}" 2>/dev/null; then
+        chmod 777 "${vscode_remote_dir}" 2>/dev/null || true
+        run_args+=(-v "${vscode_remote_dir}:/vscode")
+    else
+        log_warn "failed to create VS Code data dir at ${vscode_remote_dir}"
+    fi
+
     # Stage workspace init on the shared workspace mount for dind, then mount it in.
     if [[ -n "${DOCKER_HOST:-}" ]]; then
-        local stage_dir="${docker_mount_root}/.codespace-init"
+        local stage_dir="${config_mount_source}/.codespace-init"
         local stage_path="${stage_dir}/workspace-init.sh"
         if mkdir -p "${stage_dir}" 2>/dev/null; then
             chmod 777 "${stage_dir}" 2>/dev/null || true
