@@ -13,6 +13,7 @@ WORKSPACE_INIT_DEST_DIR="/tmp/codespace-init"
 WORKSPACE_INIT_DEST="${WORKSPACE_INIT_DEST_DIR}/workspace-init.sh"
 WORKSPACE_INIT_MOUNTED="false"
 WORKSPACE_INIT_MOUNT_SOURCE=""
+CONTAINER_LOG_STREAM_PID=""
 WORKSPACE_INIT_LOG="/tmp/workspace-init.log"
 
 fix_workspace_permissions() {
@@ -241,6 +242,7 @@ start_devcontainer() {
     done
 
     log_info "container started"
+    start_devcontainer_log_stream "${name}"
 
     if [[ "${CONTAINER_NEEDS_INIT_STAGE}" == "true" && "${CONTAINER_NEEDS_INIT_EXEC}" != "true" ]]; then
         if ! stage_workspace_init "${name}"; then
@@ -358,6 +360,22 @@ start_workspace_init_exec() {
     else
         log_warn "coder agent not detected yet; check /tmp/workspace-init.log in the devcontainer"
     fi
+}
+
+start_devcontainer_log_stream() {
+    local container="$1"
+
+    if [[ -n "${CONTAINER_LOG_STREAM_PID}" ]]; then
+        return
+    fi
+
+    if ! docker ps -a --format '{{.Names}}' | grep -q "^${container}\$"; then
+        return
+    fi
+
+    log_info "streaming devcontainer logs"
+    docker logs -f "${container}" 2>&1 &
+    CONTAINER_LOG_STREAM_PID=$!
 }
 
 stage_workspace_init() {
