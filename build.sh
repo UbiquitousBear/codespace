@@ -1,7 +1,7 @@
 #!/bin/bash
-set -euo pipefail
+# set -euo pipefail
 
-LINUXKIT_BIN="/Users/shamil/go/bin/linuxkit"
+LINUXKIT_BIN="linuxkit"
 HOST_IMAGE="ghcr.io/ubiquitousbear/codespace:latest"
 VM_IMAGE="ghcr.io/ubiquitousbear/codespaces-vm:latest"
 CODESPACE_VERSION="$(date -u +%Y%m%d%H%M%SZ)"

@@ -89,18 +89,17 @@ if [ -z "${CODER_AGENT_URL:-}" ]; then
 fi
 export CODER_AGENT_TOKEN CODER_AGENT_URL GITHUB_TOKEN GH_ENTERPRISE_TOKEN
 
-CODE_SERVER_PORT="${CODE_SERVER_PORT:-${CODER_VSCODE_PORT:-13337}}"
+CODE_SERVER_PORT="${CODE_SERVER_PORT:-${CODER_VSCODE_PORT:-${PORT:-13337}}}"
+PORT="${PORT:-${CODE_SERVER_PORT}}"
+CODE_SERVER_PORT="${PORT}"
 export CODE_SERVER_PORT
+export PORT
 export CODER_VSCODE_PORT="${CODER_VSCODE_PORT:-${CODE_SERVER_PORT}}"
 
-if [ -z "${CODE_SERVER_BIND_ADDR:-}" ]; then
-    if [ -f /proc/net/if_inet6 ]; then
-        CODE_SERVER_BIND_ADDR="[::]:${CODE_SERVER_PORT}"
-    else
-        CODE_SERVER_BIND_ADDR="127.0.0.1:${CODE_SERVER_PORT}"
-    fi
+CODE_SERVER_BIND_ADDR="${CODE_SERVER_BIND_ADDR:-}"
+if [ -n "${CODE_SERVER_BIND_ADDR}" ]; then
+    export CODE_SERVER_BIND_ADDR
 fi
-export CODE_SERVER_BIND_ADDR
 
 CODE_SERVER_LOG="${CODE_SERVER_LOG:-/dev/stdout}"
 LOG_PATH="${LOG_PATH:-${CODE_SERVER_LOG}}"
@@ -347,7 +346,11 @@ start_code_server_bg() {
             log "code-server already running on port ${CODE_SERVER_PORT}"
             exit 0
         fi
-        log "Starting code-server on ${CODE_SERVER_BIND_ADDR}..."
+        if [ -n "${CODE_SERVER_BIND_ADDR}" ]; then
+            log "Starting code-server on ${CODE_SERVER_BIND_ADDR}..."
+        else
+            log "Starting code-server on port ${PORT}..."
+        fi
         if [ -n "${CODE_SERVER_BIND_ADDR}" ]; then
             "${CODE_SERVER_BIN}" \
                 $(extension_arg) \
