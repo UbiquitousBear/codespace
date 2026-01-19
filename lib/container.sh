@@ -11,6 +11,8 @@ CODESPACE_HOST_ROOT="$(dirname "${CONTAINER_LIB_DIR}")"
 WORKSPACE_INIT_SOURCE="${CODESPACE_HOST_ROOT}/init/workspace-init.sh"
 WORKSPACE_INIT_DEST_DIR="/tmp/codespace-init"
 WORKSPACE_INIT_DEST="${WORKSPACE_INIT_DEST_DIR}/workspace-init.sh"
+WORKSPACE_INIT_MOUNTED="false"
+WORKSPACE_INIT_MOUNT_SOURCE=""
 
 fix_workspace_permissions() {
     local workspace="$1"
@@ -101,6 +103,25 @@ start_devcontainer() {
 
     # Config mount (for tokens)
     run_args+=(-v "${config_mount_source}:/run/config:ro")
+
+    # Stage workspace init on the shared workspace mount for dind, then mount it in.
+    if [[ -n "${DOCKER_HOST:-}" ]]; then
+        local stage_dir="${docker_mount_root}/.codespace-init"
+        local stage_path="${stage_dir}/workspace-init.sh"
+        if mkdir -p "${stage_dir}" 2>/dev/null; then
+            if cp "${WORKSPACE_INIT_SOURCE}" "${stage_path}" 2>/dev/null; then
+                chmod +x "${stage_path}" 2>/dev/null || true
+                WORKSPACE_INIT_MOUNTED="true"
+                WORKSPACE_INIT_MOUNT_SOURCE="${stage_path}"
+                run_args+=(-v "${WORKSPACE_INIT_MOUNT_SOURCE}:${WORKSPACE_INIT_DEST}:ro")
+                log_debug "staged workspace-init at ${WORKSPACE_INIT_MOUNT_SOURCE}"
+            else
+                log_warn "failed to stage workspace-init at ${stage_path}"
+            fi
+        else
+            log_warn "failed to create workspace-init staging dir at ${stage_dir}"
+        fi
+    fi
 
     # Additional mounts from devcontainer.json
     add_configured_mounts run_args
@@ -343,6 +364,10 @@ start_workspace_init_exec() {
 
 stage_workspace_init() {
     local container="$1"
+
+    if [[ "${WORKSPACE_INIT_MOUNTED}" == "true" ]]; then
+        return 0
+    fi
 
     if [[ ! -f "${WORKSPACE_INIT_SOURCE}" ]]; then
         log_error "workspace init script not found at ${WORKSPACE_INIT_SOURCE}"
