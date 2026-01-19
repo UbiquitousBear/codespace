@@ -56,6 +56,12 @@ services:
       set -eux
       mkdir -p /sys/fs/cgroup
       mount -t cgroup2 none /sys/fs/cgroup || true
+      mount -o remount,rw /sys/fs/cgroup || true
+      if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
+        if grep -qw memory /sys/fs/cgroup/cgroup.controllers; then
+          echo "+memory" > /sys/fs/cgroup/cgroup.subtree_control || true
+        fi
+      fi
       mkdir -p /var/workspaces /var/config
       mount -t virtiofs workspaces /var/workspaces
       mount -t virtiofs config /var/config
@@ -84,6 +90,12 @@ services:
     - -c
     - |
       set -eux
+      mount -o remount,rw /sys/fs/cgroup || true
+      if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
+        if grep -qw memory /sys/fs/cgroup/cgroup.controllers; then
+          echo "+memory" > /sys/fs/cgroup/cgroup.subtree_control || true
+        fi
+      fi
 
       echo "[workspace] booting at $(/bin/busybox date)"
       echo "[workspace] kernel: $(/bin/busybox uname -a)"

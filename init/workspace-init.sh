@@ -73,6 +73,14 @@ case ":${PATH}:" in
     *) PATH="${DEFAULT_PATH}:${PATH}" ;;
 esac
 export PATH="${HOME}/.local/bin:${PATH}"
+if [ -d "/vscode" ] && [ -w "/vscode" ]; then
+    mkdir -p /vscode/bin 2>/dev/null || true
+    case ":${PATH}:" in
+        *:/vscode/bin:*) ;;
+        *) PATH="/vscode/bin:${PATH}" ;;
+    esac
+fi
+export PATH
 
 check_cgroup_memcg() {
     if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
@@ -90,6 +98,70 @@ check_cgroup_memcg() {
 }
 
 check_cgroup_memcg
+
+ensure_docker_cli() {
+    if command -v docker >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if [ -x "/run/config/.codespace-bin/docker" ]; then
+        target_dir="/vscode/bin"
+        if [ ! -d "${target_dir}" ] || [ ! -w "${target_dir}" ]; then
+            target_dir="${HOME}/.local/bin"
+            mkdir -p "${target_dir}" 2>/dev/null || true
+        fi
+        if cp "/run/config/.codespace-bin/docker" "${target_dir}/docker" 2>/dev/null; then
+            chmod +x "${target_dir}/docker" 2>/dev/null || true
+            log "docker CLI staged from /run/config/.codespace-bin"
+            return 0
+        fi
+    fi
+
+    if ! command -v curl >/dev/null 2>&1; then
+        log_stderr "WARN: docker CLI not found and curl is unavailable"
+        return 1
+    fi
+
+    arch="$(uname -m)"
+    case "${arch}" in
+        x86_64|amd64)
+            arch="x86_64"
+            ;;
+        aarch64|arm64)
+            arch="aarch64"
+            ;;
+        *)
+            log_stderr "WARN: unsupported arch for docker CLI download: ${arch}"
+            return 1
+            ;;
+    esac
+
+    target_dir="/vscode/bin"
+    if [ ! -d "${target_dir}" ] || [ ! -w "${target_dir}" ]; then
+        target_dir="${HOME}/.local/bin"
+        mkdir -p "${target_dir}" 2>/dev/null || true
+    fi
+
+    version="${DOCKER_CLI_VERSION:-${DOCKER_VERSION:-27.5.1}}"
+    tmp_dir="$(mktemp -d)"
+    log "Downloading docker CLI ${version}..."
+    if curl -fsSL "https://download.docker.com/linux/static/stable/${arch}/docker-${version}.tgz" \
+        -o "${tmp_dir}/docker.tgz"; then
+        tar -xzf "${tmp_dir}/docker.tgz" -C "${tmp_dir}" >/dev/null 2>&1 || true
+        if [ -x "${tmp_dir}/docker/docker" ]; then
+            mv "${tmp_dir}/docker/docker" "${target_dir}/docker"
+            chmod +x "${target_dir}/docker" 2>/dev/null || true
+            log "docker CLI installed to ${target_dir}/docker"
+            rm -rf "${tmp_dir}"
+            return 0
+        fi
+    fi
+    rm -rf "${tmp_dir}"
+    log_stderr "WARN: failed to install docker CLI"
+    return 1
+}
+
+ensure_docker_cli || true
 
 if [ -z "${CODER_AGENT_TOKEN:-}" ] && [ -f /run/config/coder-token ]; then
     CODER_AGENT_TOKEN="$(cat /run/config/coder-token)"
