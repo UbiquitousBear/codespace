@@ -15,6 +15,22 @@ onboot:
   - name: sysfs
     image: linuxkit/sysfs:6d5bd933762f6b216744c711c6e876756cee9600
 
+  - name: cgroup2
+    image: linuxkit/alpine:3.20
+    command:
+    - /bin/sh
+    - -c
+    - |
+      set -eux
+      mount -t cgroup2 none /sys/fs/cgroup || true
+      mount -o remount,rw /sys/fs/cgroup || true
+      if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
+        if grep -qw memory /sys/fs/cgroup/cgroup.controllers; then
+          echo "+memory" > /sys/fs/cgroup/cgroup.subtree_control || true
+        fi
+      fi
+      mount | grep /sys/fs/cgroup || true
+
   - name: dhcpcd
     image: linuxkit/dhcpcd:b87e9ececac55a65eaa592f4dd8b4e0c3009afdb
     command: ["/sbin/dhcpcd", "--nobackground", "-f", "/dhcpcd.conf", "-1"]
@@ -65,6 +81,13 @@ services:
       mkdir -p /var/workspaces /var/config
       mount -t virtiofs workspaces /var/workspaces
       mount -t virtiofs config /var/config
+      mkdir -p /var/config/.codespace-bin
+      if [ -x /usr/local/bin/docker ]; then
+        cp /usr/local/bin/docker /var/config/.codespace-bin/docker
+      elif [ -x /usr/bin/docker ]; then
+        cp /usr/bin/docker /var/config/.codespace-bin/docker
+      fi
+      chmod 755 /var/config/.codespace-bin/docker || true
       mount | grep -E 'virtiofs|workspaces|config' || true
       ls -la /var/workspaces || true
       exec /usr/local/bin/docker-init /usr/local/bin/dockerd
