@@ -103,6 +103,11 @@ start_devcontainer() {
         run_args+=(-v "/var/run/docker.sock:/var/run/docker.sock")
     fi
 
+    # Provide docker CLI inside the devcontainer when using dind
+    if [[ -n "${DOCKER_HOST:-}" ]]; then
+        run_args+=(-v "/usr/local/bin/docker:/usr/local/bin/docker:ro")
+    fi
+
     # Config mount (for tokens)
     run_args+=(-v "${config_mount_source}:/run/config:ro")
 
@@ -442,6 +447,12 @@ add_environment_vars() {
     if [[ -n "${DC_REMOTE_USER}" ]]; then
         args+=(-e "REMOTE_USER=${DC_REMOTE_USER}")
     fi
+
+    local user_env="${DC_REMOTE_USER:-${REMOTE_USER:-codespace}}"
+    args+=(-e "USER=${user_env}")
+    args+=(-e "LOGNAME=${user_env}")
+    args+=(-e "USERNAME=${user_env}")
+    args+=(-e "PATH=${PATH}")
 
     # Container env from devcontainer.json
     if [[ "${DC_CONTAINER_ENV}" != "{}" ]]; then
