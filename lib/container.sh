@@ -87,11 +87,6 @@ start_devcontainer() {
         config_mount_source="/var/config"
     fi
 
-    WORKSPACE_INIT_LOG="/tmp/workspace-init.log"
-    if [[ "${workspace}" == /workspaces/* ]]; then
-        WORKSPACE_INIT_LOG="/workspaces/.codespace-init/workspace-init.log"
-    fi
-
     # Workspace mount
     local workspace_mount_source="${workspace}"
     local workspace_mount_target="${workspace}"
@@ -156,12 +151,7 @@ start_devcontainer() {
         log_info "image has no entrypoint/cmd (or only a shell); waiting to exec workspace-init (coder agent stays PID 1)"
         CONTAINER_NEEDS_INIT_STAGE="true"
         run_args+=(--entrypoint "/bin/sh")
-        local follow_logs="false"
-        if [[ "${LOG_LEVEL:-}" == "debug" ]]; then
-            follow_logs="true"
-        fi
-        local log_dir="${WORKSPACE_INIT_LOG%/*}"
-        cmd_args+=("-c" "mkdir -p '${log_dir}'; touch '${WORKSPACE_INIT_LOG}'; if [ \"${follow_logs}\" = \"true\" ] && command -v tail >/dev/null 2>&1; then tail -f '${WORKSPACE_INIT_LOG}' & fi; while [ ! -x ${WORKSPACE_INIT_DEST} ]; do sleep 0.2; done; exec ${WORKSPACE_INIT_DEST} >>'${WORKSPACE_INIT_LOG}' 2>&1")
+        cmd_args+=("-c" "while [ ! -x ${WORKSPACE_INIT_DEST} ]; do sleep 0.2; done; exec ${WORKSPACE_INIT_DEST}")
     fi
     run_args+=("${image}")
     run_args+=("${cmd_args[@]}")
@@ -356,10 +346,8 @@ start_workspace_init_exec() {
         return
     fi
 
-    docker exec -u 0 "${container}" /bin/sh -c "mkdir -p '${WORKSPACE_INIT_LOG%/*}'" >/dev/null 2>&1 || true
-
     if ! docker exec -d -u "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" \
-        "${container}" /bin/sh -c "${WORKSPACE_INIT_DEST} >>'${WORKSPACE_INIT_LOG}' 2>&1" >/dev/null 2>&1; then
+        "${container}" /bin/sh -c "${WORKSPACE_INIT_DEST} >/proc/1/fd/1 2>/proc/1/fd/2" >/dev/null 2>&1; then
         log_warn "failed to start workspace init via exec"
         return
     fi

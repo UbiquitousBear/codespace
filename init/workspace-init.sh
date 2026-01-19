@@ -72,11 +72,7 @@ CODE_SERVER_PORT="${CODE_SERVER_PORT:-${CODER_VSCODE_PORT:-13337}}"
 export CODE_SERVER_PORT
 export CODER_VSCODE_PORT="${CODER_VSCODE_PORT:-${CODE_SERVER_PORT}}"
 
-CODE_SERVER_LOG="${CODE_SERVER_LOG:-/tmp/code-server.log}"
-if [ -d "/workspaces" ]; then
-    CODE_SERVER_LOG="/workspaces/.codespace-init/code-server.log"
-    mkdir -p "/workspaces/.codespace-init" 2>/dev/null || true
-fi
+CODE_SERVER_LOG="${CODE_SERVER_LOG:-/dev/stdout}"
 
 pick_install_dir() {
     if [ -d "/usr/local/bin" ] && [ -w "/usr/local/bin" ]; then
