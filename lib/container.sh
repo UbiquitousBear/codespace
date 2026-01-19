@@ -374,7 +374,7 @@ start_devcontainer_log_stream() {
     fi
 
     log_info "streaming devcontainer logs"
-    docker logs -f "${container}" 2>&1 &
+    docker logs -f "${container}" 2>&1 | sed 's/^/[devcontainer] /' >&2 &
     CONTAINER_LOG_STREAM_PID=$!
 }
 
