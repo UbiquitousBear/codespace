@@ -104,9 +104,37 @@ start_devcontainer() {
     fi
 
     # Provide docker CLI inside the devcontainer when using dind.
-    # Path is resolved inside the docker service container (daemon namespace).
+    # Stage it via /var/config so it exists in the daemon namespace.
     if [[ -n "${DOCKER_HOST:-}" ]]; then
-        run_args+=(-v "/usr/local/bin/docker:/usr/local/bin/docker:ro")
+        local docker_stage_dir="${config_mount_source}/.codespace-bin"
+        local docker_stage="${docker_stage_dir}/docker"
+        local docker_stage_ok="false"
+        local docker_cli=""
+        for candidate in /usr/local/bin/docker /usr/bin/docker; do
+            if [[ -x "${candidate}" ]]; then
+                docker_cli="${candidate}"
+                break
+            fi
+        done
+        if [[ -n "${docker_cli}" ]]; then
+            if mkdir -p "${docker_stage_dir}" 2>/dev/null; then
+                chmod 777 "${docker_stage_dir}" 2>/dev/null || true
+                if cp "${docker_cli}" "${docker_stage}" 2>/dev/null; then
+                    chmod 755 "${docker_stage}" 2>/dev/null || true
+                    docker_stage_ok="true"
+                else
+                    log_warn "failed to stage docker CLI at ${docker_stage}"
+                fi
+            else
+                log_warn "failed to create docker CLI staging dir at ${docker_stage_dir}"
+            fi
+        else
+            log_warn "docker CLI not found on host; skipping stage"
+        fi
+
+        if [[ "${docker_stage_ok}" == "true" ]]; then
+            run_args+=(-v "${docker_stage}:/usr/local/bin/docker:ro")
+        fi
     fi
 
     # Config mount (for tokens)
