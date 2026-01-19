@@ -105,7 +105,18 @@ start_devcontainer() {
 
     # Provide docker CLI inside the devcontainer when using dind
     if [[ -n "${DOCKER_HOST:-}" ]]; then
-        run_args+=(-v "/usr/local/bin/docker:/usr/local/bin/docker:ro")
+        local docker_stage="/var/run/codespace/docker"
+        if [[ -x "/usr/local/bin/docker" ]]; then
+            mkdir -p "$(dirname "${docker_stage}")" 2>/dev/null || true
+            if cp "/usr/local/bin/docker" "${docker_stage}" 2>/dev/null; then
+                chmod 755 "${docker_stage}" 2>/dev/null || true
+                run_args+=(-v "${docker_stage}:/usr/local/bin/docker:ro")
+            else
+                log_warn "failed to stage docker CLI at ${docker_stage}"
+            fi
+        else
+            log_warn "docker CLI not found at /usr/local/bin/docker; skipping mount"
+        fi
     fi
 
     # Config mount (for tokens)
