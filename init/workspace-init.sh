@@ -9,6 +9,10 @@ log() {
     echo "[devcontainer] $*"
 }
 
+log_stderr() {
+    echo "[devcontainer] $*" >&2
+}
+
 LOCK_FILE="/tmp/workspace-init.lock"
 
 process_running() {
@@ -28,7 +32,7 @@ if [ -f "${LOCK_FILE}" ]; then
 fi
 
 USER_NAME="$(id -un 2>/dev/null || echo "")"
-if [ -z "${HOME:-}" ] || [ ! -d "${HOME}" ]; then
+if [ -z "${HOME:-}" ] || [ ! -d "${HOME}" ] || [ "${HOME}" = "/" ]; then
     if [ -n "${USER_NAME}" ] && [ -d "/home/${USER_NAME}" ]; then
         HOME="/home/${USER_NAME}"
     else
@@ -36,6 +40,10 @@ if [ -z "${HOME:-}" ] || [ ! -d "${HOME}" ]; then
     fi
 fi
 mkdir -p "${HOME}" 2>/dev/null || true
+if [ ! -w "${HOME}" ]; then
+    HOME="/tmp/dev-home"
+    mkdir -p "${HOME}" 2>/dev/null || true
+fi
 export HOME
 export PATH="${HOME}/.local/bin:${PATH}"
 
@@ -69,8 +77,13 @@ pick_install_dir() {
         echo "/usr/local/bin"
         return 0
     fi
-    mkdir -p "${HOME}/.local/bin" 2>/dev/null || true
-    echo "${HOME}/.local/bin"
+    if [ -n "${HOME:-}" ]; then
+        mkdir -p "${HOME}/.local/bin" 2>/dev/null || true
+        echo "${HOME}/.local/bin"
+        return 0
+    fi
+    mkdir -p "/tmp/.local/bin" 2>/dev/null || true
+    echo "/tmp/.local/bin"
 }
 
 ensure_coder() {
@@ -92,17 +105,25 @@ ensure_coder() {
     version="${CODER_VERSION:-2.28.6}"
     tmp_dir="$(mktemp -d)"
 
-    log "Installing coder ${version} into ${install_dir}"
+    log_stderr "Installing coder ${version} into ${install_dir}"
     if ! curl -fsSL "https://github.com/coder/coder/releases/download/v${version}/coder_${version}_linux_amd64.tar.gz" \
         -o "${tmp_dir}/coder.tar.gz"; then
-        log "ERROR: failed to download coder ${version}"
+        log_stderr "ERROR: failed to download coder ${version}"
         rm -rf "${tmp_dir}"
         return 1
     fi
     if ! tar -xzf "${tmp_dir}/coder.tar.gz" -C "${tmp_dir}"; then
-        log "ERROR: failed to extract coder ${version}"
+        log_stderr "ERROR: failed to extract coder ${version}"
         rm -rf "${tmp_dir}"
         return 1
+    fi
+
+    if [ ! -d "${install_dir}" ]; then
+        if ! mkdir -p "${install_dir}" 2>/dev/null; then
+            log_stderr "ERROR: failed to create install dir ${install_dir}"
+            rm -rf "${tmp_dir}"
+            return 1
+        fi
     fi
 
     if [ -f "${tmp_dir}/coder" ]; then
@@ -122,7 +143,7 @@ ensure_code_server() {
             echo "${CODER_VSCODE_BIN}"
             return 0
         fi
-        log "WARN: CODER_VSCODE_BIN is not executable: ${CODER_VSCODE_BIN}"
+        log_stderr "WARN: CODER_VSCODE_BIN is not executable: ${CODER_VSCODE_BIN}"
     fi
 
     if command -v code-server >/dev/null 2>&1; then
@@ -131,7 +152,7 @@ ensure_code_server() {
     fi
 
     if ! command -v curl >/dev/null 2>&1; then
-        log "WARN: curl is required to install code-server."
+        log_stderr "WARN: curl is required to install code-server."
         return 1
     fi
 
@@ -142,13 +163,13 @@ ensure_code_server() {
     mkdir -p "${install_prefix}" 2>/dev/null || true
 
     if command -v bash >/dev/null 2>&1; then
-        log "Installing code-server into ${install_prefix}"
+        log_stderr "Installing code-server into ${install_prefix}"
         if ! curl -fsSL https://code-server.dev/install.sh | bash -s -- --method=standalone --prefix="${install_prefix}"; then
-            log "WARN: failed to install code-server"
+            log_stderr "WARN: failed to install code-server"
             return 1
         fi
     else
-        log "WARN: bash is required to install code-server."
+        log_stderr "WARN: bash is required to install code-server."
         return 1
     fi
 
@@ -179,12 +200,12 @@ if [ -n "${CODE_SERVER_BIN}" ]; then
             >/tmp/code-server.log 2>&1 &
     fi
 else
-    log "WARN: code-server not found; ensure it is installed in the devcontainer image."
+    log_stderr "WARN: code-server not found; ensure it is installed in the devcontainer image."
 fi
 
 CODER_BIN="$(ensure_coder || true)"
 if [ -z "${CODER_BIN}" ] || [ ! -x "${CODER_BIN}" ]; then
-    log "ERROR: coder binary not available; cannot start agent."
+    log_stderr "ERROR: coder binary not available; cannot start agent."
     exit 1
 fi
 

@@ -128,7 +128,11 @@ start_devcontainer() {
         log_info "image has no entrypoint/cmd (or only a shell); waiting to exec workspace-init (coder agent stays PID 1)"
         CONTAINER_NEEDS_INIT_STAGE="true"
         run_args+=(--entrypoint "/bin/sh")
-        cmd_args+=("-c" "while [ ! -x ${WORKSPACE_INIT_DEST} ]; do sleep 0.2; done; exec ${WORKSPACE_INIT_DEST}")
+        local follow_logs="false"
+        if [[ "${LOG_LEVEL:-}" == "debug" ]]; then
+            follow_logs="true"
+        fi
+        cmd_args+=("-c" "touch /tmp/workspace-init.log; if [ \"${follow_logs}\" = \"true\" ] && command -v tail >/dev/null 2>&1; then tail -f /tmp/workspace-init.log & fi; while [ ! -x ${WORKSPACE_INIT_DEST} ]; do sleep 0.2; done; exec ${WORKSPACE_INIT_DEST} >>/tmp/workspace-init.log 2>&1")
     fi
     run_args+=("${image}")
     run_args+=("${cmd_args[@]}")
