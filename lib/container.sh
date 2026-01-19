@@ -103,25 +103,10 @@ start_devcontainer() {
         run_args+=(-v "/var/run/docker.sock:/var/run/docker.sock")
     fi
 
-    # Provide docker CLI inside the devcontainer when using dind
+    # Provide docker CLI inside the devcontainer when using dind.
+    # Path is resolved inside the docker service container (daemon namespace).
     if [[ -n "${DOCKER_HOST:-}" ]]; then
-        local docker_stage_dir="${config_mount_source}/.codespace-bin"
-        local docker_stage="${docker_stage_dir}/docker"
-        if [[ -x "/usr/local/bin/docker" ]]; then
-            if mkdir -p "${docker_stage_dir}" 2>/dev/null; then
-                chmod 777 "${docker_stage_dir}" 2>/dev/null || true
-                if cp "/usr/local/bin/docker" "${docker_stage}" 2>/dev/null; then
-                    chmod 755 "${docker_stage}" 2>/dev/null || true
-                    run_args+=(-v "${docker_stage}:/usr/local/bin/docker:ro")
-                else
-                    log_warn "failed to stage docker CLI at ${docker_stage}"
-                fi
-            else
-                log_warn "failed to create docker CLI staging dir at ${docker_stage_dir}"
-            fi
-        else
-            log_warn "docker CLI not found at /usr/local/bin/docker; skipping mount"
-        fi
+        run_args+=(-v "/usr/local/bin/docker:/usr/local/bin/docker:ro")
     fi
 
     # Config mount (for tokens)

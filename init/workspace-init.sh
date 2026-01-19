@@ -209,7 +209,7 @@ ensure_coder() {
     fi
 
     install_dir="$(pick_install_dir)"
-    version="${CODER_VERSION:-2.28.6}"
+    version="${CODER_VERSION:-2.29.1}"
     tmp_dir="$(mktemp -d)"
 
     log_stderr "Installing coder ${version} into ${install_dir}"
