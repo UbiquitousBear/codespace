@@ -72,6 +72,12 @@ CODE_SERVER_PORT="${CODE_SERVER_PORT:-${CODER_VSCODE_PORT:-13337}}"
 export CODE_SERVER_PORT
 export CODER_VSCODE_PORT="${CODER_VSCODE_PORT:-${CODE_SERVER_PORT}}"
 
+CODE_SERVER_LOG="${CODE_SERVER_LOG:-/tmp/code-server.log}"
+if [ -d "/workspaces" ]; then
+    CODE_SERVER_LOG="/workspaces/.codespace-init/code-server.log"
+    mkdir -p "/workspaces/.codespace-init" 2>/dev/null || true
+fi
+
 pick_install_dir() {
     if [ -d "/usr/local/bin" ] && [ -w "/usr/local/bin" ]; then
         echo "/usr/local/bin"
@@ -181,27 +187,33 @@ ensure_code_server() {
     return 1
 }
 
+start_code_server_bg() {
+    (
+        CODE_SERVER_BIN="$(ensure_code_server || true)"
+        if [ -n "${CODE_SERVER_BIN}" ]; then
+            if process_running "code-server.*${CODE_SERVER_PORT}"; then
+                log "code-server already running on port ${CODE_SERVER_PORT}"
+                exit 0
+            fi
+            log "Starting code-server on port ${CODE_SERVER_PORT}..."
+            "${CODE_SERVER_BIN}" \
+                --bind-addr "127.0.0.1:${CODE_SERVER_PORT}" \
+                --auth none \
+                --disable-telemetry \
+                --disable-update-check \
+                >>"${CODE_SERVER_LOG}" 2>&1 &
+        else
+            log_stderr "WARN: code-server not found; ensure it is installed in the devcontainer image."
+        fi
+    ) >>"${CODE_SERVER_LOG}" 2>&1 &
+}
+
 if process_running "coder agent"; then
     log "Coder agent already running; exiting."
     exit 0
 fi
 
-CODE_SERVER_BIN="$(ensure_code_server || true)"
-if [ -n "${CODE_SERVER_BIN}" ]; then
-    if process_running "code-server.*${CODE_SERVER_PORT}"; then
-        log "code-server already running on port ${CODE_SERVER_PORT}"
-    else
-        log "Starting code-server on port ${CODE_SERVER_PORT}..."
-        "${CODE_SERVER_BIN}" \
-            --bind-addr "127.0.0.1:${CODE_SERVER_PORT}" \
-            --auth none \
-            --disable-telemetry \
-            --disable-update-check \
-            >/tmp/code-server.log 2>&1 &
-    fi
-else
-    log_stderr "WARN: code-server not found; ensure it is installed in the devcontainer image."
-fi
+start_code_server_bg
 
 CODER_BIN="$(ensure_coder || true)"
 if [ -z "${CODER_BIN}" ] || [ ! -x "${CODER_BIN}" ]; then
