@@ -62,18 +62,6 @@ services:
           echo "+memory" > /sys/fs/cgroup/cgroup.subtree_control || true
         fi
       fi
-      mkdir -p /var/workspaces /var/config
-      mount -t virtiofs workspaces /var/workspaces
-      mount -t virtiofs config /var/config
-      mkdir -p /var/config/.codespace-bin
-      if [ -x /usr/local/bin/docker ]; then
-        cp /usr/local/bin/docker /var/config/.codespace-bin/docker
-      elif [ -x /usr/bin/docker ]; then
-        cp /usr/bin/docker /var/config/.codespace-bin/docker
-      fi
-      chmod 755 /var/config/.codespace-bin/docker || true
-      mount | grep -E 'virtiofs|workspaces|config' || true
-      ls -la /var/workspaces || true
       exec /usr/local/bin/docker-init /usr/local/bin/dockerd
 
   - name: workspace
