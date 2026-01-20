@@ -479,7 +479,12 @@ if process_running "coder agent"; then
     exit 0
 fi
 
-start_code_server_bg
+CODE_SERVER_START_MODE="${CODE_SERVER_START_MODE:-coder-script}"
+if [ "${CODE_SERVER_START_MODE}" = "workspace-init" ]; then
+    start_code_server_bg
+else
+    log "code-server startup delegated to coder script"
+fi
 
 CODER_BIN="$(ensure_coder || true)"
 if [ -z "${CODER_BIN}" ] || [ ! -x "${CODER_BIN}" ]; then
